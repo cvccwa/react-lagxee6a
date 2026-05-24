@@ -47,6 +47,7 @@ const sel = {padding:"8px 10px",background:C.bg,border:`1px solid ${C.border}`,b
 const lbl = {display:"block",fontSize:10,color:C.textDim,letterSpacing:1.5,marginBottom:5,textTransform:"uppercase"};
 
 // ── Logic ─────────────────────────────────────────────────────────────────────
+
 function scoreItem(item) {
   let s = (item.rating - 5500) / 200;
   for (const e of item.extendedEffects||[]) {
@@ -135,16 +136,16 @@ function GearCard({item,onDelete,highlight}) {
 }
 
 // ── Add Tab ───────────────────────────────────────────────────────────────────
+
 const emptyFx = ()=>({grade:"S",stat:"",value:""});
 const blankForm = (type="Weapon")=>({type,name:"",rating:"",extendedEffects:Array(5).fill(null).map(emptyFx)});
 
 function AddTab({form,setForm,addItem,flash,onBulkImport}) {
-  const [mode,setMode] = useState("import"); // default to import since that's primary workflow
+  const [mode,setMode] = useState("import");
   const [jsonText,setJsonText] = useState("");
   const [msg,setMsg] = useState({text:"",ok:true});
 
   const setFx=(idx,field,val)=>setForm(f=>({...f,extendedEffects:f.extendedEffects.map((e,i)=>i===idx?{...e,[field]:val}:e)}));
-
   const handleImport = () => {
     try {
       let parsed = JSON.parse(jsonText.trim());
@@ -157,7 +158,6 @@ function AddTab({form,setForm,addItem,flash,onBulkImport}) {
       setTimeout(()=>setMsg({text:"",ok:true}),2500);
     } catch { setMsg({text:"⚠ Invalid JSON — check format.",ok:false}); }
   };
-
   return (
     <div style={{maxWidth:680,margin:"0 auto"}}>
       <div style={{display:"flex",gap:0,marginBottom:20,border:`1px solid ${C.border}`,borderRadius:7,overflow:"hidden"}}>
@@ -246,7 +246,6 @@ function InventoryTab({items,filterType,setFilterType,sortBy,setSortBy,deleteIte
     setShowRestore(false);
     onExport(json);
   };
-
   const handleRestore = () => {
     try {
       let parsed = JSON.parse(restoreText.trim());
@@ -259,7 +258,6 @@ function InventoryTab({items,filterType,setFilterType,sortBy,setSortBy,deleteIte
       setTimeout(()=>setRestoreMsg({text:"",ok:true}),2500);
     } catch { setRestoreMsg({text:"⚠ Invalid JSON",ok:false}); }
   };
-
   return (
     <div>
       {/* Export / Restore bar */}
@@ -267,11 +265,8 @@ function InventoryTab({items,filterType,setFilterType,sortBy,setSortBy,deleteIte
         <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
           <div style={{flex:1}}>
             <p style={{margin:0,color:C.gold,fontSize:11,fontWeight:700,letterSpacing:1}}>BACKUP YOUR INVENTORY</p>
-            <p style={{margin:"2px 0 0",color:C.textDim,fontSize:11}}>Load from Drive to restore instantly. Export to save a backup.</p>
+            <p style={{margin:"2px 0 0",color:C.textDim,fontSize:11}}>Export to save a backup, or paste an exported JSON profile to restore.</p>
           </div>
-          <button onClick={loadFromDrive} disabled={driveLoading} style={{padding:"7px 14px",background:driveLoading?"#111":"#0d0d2e",border:`1.5px solid ${driveLoading?C.border:"#7b68ee"}`,borderRadius:5,color:driveLoading?C.textDim:"#a78bfa",fontWeight:700,fontSize:11,letterSpacing:1,cursor:driveLoading?"wait":"pointer",fontFamily:"'Courier New',monospace",whiteSpace:"nowrap"}}>
-            {driveLoading?"⏳ Loading...":"☁ Load from Drive"}
-          </button>
           <button onClick={handleExport} disabled={items.length===0} style={{padding:"7px 14px",background:showExport?"#0d2e15":"#130f00",border:`1.5px solid ${showExport?C.green:C.gold}`,borderRadius:5,color:showExport?C.green:C.gold,fontWeight:700,fontSize:11,letterSpacing:1,cursor:items.length===0?"not-allowed":"pointer",fontFamily:"'Courier New',monospace",whiteSpace:"nowrap"}}>
             {showExport?"✓ Showing Export":"📋 Export JSON"}
           </button>
@@ -279,7 +274,6 @@ function InventoryTab({items,filterType,setFilterType,sortBy,setSortBy,deleteIte
             {showRestore?"▲ Cancel":"↩ Restore"}
           </button>
         </div>
-        {driveMsg&&<p style={{margin:"8px 0 0",fontSize:12,color:driveMsg.startsWith("✓")?C.green:"#f87171"}}>{driveMsg}</p>}
 
         {/* Export textarea — user selects and copies manually */}
         {showExport&&(
@@ -309,7 +303,7 @@ function InventoryTab({items,filterType,setFilterType,sortBy,setSortBy,deleteIte
 
       {/* Filter / sort bar */}
       <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
-        {["All","Weapon","Accessory","Exclusive"].map(t=>(
+        {["All","Weapon","Accessory","Exclusive"].map(t&&(
           <button key={t} onClick={()=>setFilterType(t)} style={{padding:"6px 14px",background:filterType===t?"#1a1200":"transparent",border:`1.5px solid ${filterType===t?C.gold:C.border}`,color:filterType===t?C.gold:C.textDim,borderRadius:5,cursor:"pointer",fontSize:12,letterSpacing:1,fontFamily:"'Courier New',monospace"}}>
             {t}{t!=="All"?` (${counts[t]})`:` (${items.length})`}
           </button>
@@ -334,7 +328,8 @@ function InventoryTab({items,filterType,setFilterType,sortBy,setSortBy,deleteIte
 }
 
 // ── Optimize Tab ──────────────────────────────────────────────────────────────
-                                                function OptimizeTab({result,runOptimize,counts}) {
+
+function OptimizeTab({result,runOptimize,counts}) {
   const hasAll=counts.Weapon>0&&counts.Accessory>0&&counts.Exclusive>0;
   const covered=result?MANDATORY_ENH.filter(m=>[result.weapon,result.accessory,result.exclusive].some(p=>p.extendedEffects?.some(e=>e.stat===m))):[];
   const whichPiece=m=>result?[result.weapon,result.accessory,result.exclusive].find(p=>p.extendedEffects?.some(e=>e.stat===m))?.type:null;
@@ -382,7 +377,6 @@ function InventoryTab({items,filterType,setFilterType,sortBy,setSortBy,deleteIte
 }
 
 // ── App ───────────────────────────────────────────────────────────────────────
-
 export default function App() {
   const [tab,setTab] = useState("add");
   const [items,setItems] = useState([]);
@@ -400,7 +394,6 @@ export default function App() {
       setLoading(false);
     })();
   },[]);
-
   const persist=next=>{try{localStorage.setItem("bh:gear:v1",JSON.stringify(next));}catch{}};
 
   const addItem=async()=>{
@@ -410,7 +403,6 @@ export default function App() {
     setForm(blankForm(form.type));setOptimResult(null);
     setFlash(true);setTimeout(()=>setFlash(false),1000);
   };
-
   const bulkImport=async(parsed)=>{
     const newItems=parsed.map(i=>({id:`${Date.now()}${Math.random().toString(36).slice(2)}`,type:i.type,name:i.name,rating:+i.rating,extendedEffects:(i.extendedEffects||[]).filter(e=>e.stat)}));
     const next=[...items,...newItems];setItems(next);await persist(next);setOptimResult(null);
@@ -428,7 +420,6 @@ export default function App() {
   const displayItems=(filterType==="All"?items:items.filter(i=>i.type===filterType)).map(i=>({...i,_score:scoreItem(i)})).sort((a,b)=>sortBy==="rating"?b.rating-a.rating:b._score-a._score);
 
   if(loading) return <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",color:C.textDim}}>Loading...</div>;
-
   return (
     <div style={{minHeight:"100vh",background:C.bg,color:C.text,fontFamily:"'Courier New',Courier,monospace"}}>
       <div style={{background:"#07070e",borderBottom:`2px solid ${C.red}`,padding:"14px 20px"}}>
@@ -459,4 +450,4 @@ export default function App() {
       </div>
     </div>
   );
-        }
+                                                    }
