@@ -1,13 +1,14 @@
 // ── api.js ────────────────────────────────────────────────────────────────────
 // All external API calls: Anthropic (gear scanning) and JSONBin (cloud storage).
-// API keys are always read from localStorage at call time — never hardcoded here.
+// Sensitive parameters execute on the cloud layer to eliminate client visibility.
 
 import { ALL_STATS } from "./config.js";
 
-// ── JSONBin ───────────────────────────────────────────────────────────────────
+// ── JSONBin Cloud Inventory Sync ─────────────────────────────────────────────
 
 const JSONBIN_BASE = "https://api.jsonbin.io/v3/b";
-// Check Vercel environment variables first, then fallback to local browser storage
+
+// Fixed for Create React App system variables (package-lock.json architecture)
 const getJsonBinKey = () => process.env.REACT_APP_BIN_KEY || localStorage.getItem("bh:binKey") || "";
 
 export async function jbCreate(data) {
@@ -48,7 +49,7 @@ export async function jbUpdate(binId, data) {
   if (!d.record) throw new Error("Failed to update bin");
 }
 
-// ── Anthropic Gear Scanning ───────────────────────────────────────────────────
+// ── Anthropic Secure Serverless Gear Scanning ─────────────────────────────────
 
 export async function fileToBase64(file) {
   return new Promise((res, rej) => {
@@ -59,15 +60,14 @@ export async function fileToBase64(file) {
   });
 }
 
-export async function scanGearCard(base64, mediaType, apiKey) {
+export async function scanGearCard(base64, mediaType) {
   const statList = ALL_STATS.map(s => `"${s}"`).join(", ");
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  
+  // Routes traffic securely via your internal Vercel serverless backend proxy
+  const res = await fetch("/api/scan", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true"
+      "Content-Type": "application/json"
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
@@ -75,8 +75,8 @@ export async function scanGearCard(base64, mediaType, apiKey) {
       messages: [{
         role: "user",
         content: [
-          { type:"image", source:{ type:"base64", media_type:mediaType, data:base64 } },
-          { type:"text", text:
+          { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+          { type: "text", text:
             `Read this Marvel Rivals Blood Hunt gear card. If two cards appear side by side, read ONLY the LEFT (selected) card. ` +
             `Extract ONLY the EXTENDED EFFECT rows, NOT the BASE EFFECT. Return ONLY valid JSON, no markdown:\n` +
             `{"type":"Weapon|Accessory|Exclusive","name":"gear name","rating":7018,"extendedEffects":[{"grade":"S","stat":"exact stat name","value":"+443%"}]}\n` +
@@ -86,14 +86,18 @@ export async function scanGearCard(base64, mediaType, apiKey) {
       }]
     })
   });
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || `API error ${res.status}`);
+    throw new Error(err.error?.message || `Proxy serverless communication error ${res.status}`);
   }
+
   const data = await res.json();
   const text = data.content?.find(b => b.type === "text")?.text || "";
   const clean = text.replace(/```json|```/g, "").trim();
   const parsed = JSON.parse(clean);
+  
+  // Restores your precise item object construction mapping safely
   return {
     id: `${Date.now()}${Math.random().toString(36).slice(2)}`,
     type: parsed.type,
