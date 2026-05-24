@@ -303,7 +303,7 @@ function InventoryTab({items,filterType,setFilterType,sortBy,setSortBy,deleteIte
 
       {/* Filter / sort bar */}
       <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
-        {["All","Weapon","Accessory","Exclusive"].map(t&&(
+        {["All","Weapon","Accessory","Exclusive"].map(t=>(
           <button key={t} onClick={()=>setFilterType(t)} style={{padding:"6px 14px",background:filterType===t?"#1a1200":"transparent",border:`1.5px solid ${filterType===t?C.gold:C.border}`,color:filterType===t?C.gold:C.textDim,borderRadius:5,cursor:"pointer",fontSize:12,letterSpacing:1,fontFamily:"'Courier New',monospace"}}>
             {t}{t!=="All"?` (${counts[t]})`:` (${items.length})`}
           </button>
