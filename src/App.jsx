@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -15,6 +15,7 @@ const BASE_ATTRS = [
   "Bonus Damage vs Bosses","Damage Bonus vs Healthy Enemies","Health Restored on Kill",
   "Healing Rune Charge Slots","Block Damage Reduction",
 ];
+const ALL_STATS = [...ENHANCEMENTS, ...BASE_ATTRS];
 const MANDATORY_ENH = [
   "High-Voltage Field Enhancement","High-Speed Shock Enhancement",
   "Rune Onslaught Enhancement","Lightning Domain Enhancement",
@@ -46,9 +47,90 @@ const inp = {width:"100%",padding:"8px 10px",background:C.bg,border:`1px solid $
 const sel = {padding:"8px 10px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:5,color:C.text,fontSize:12,width:"100%",boxSizing:"border-box",outline:"none",fontFamily:"'Courier New',monospace"};
 const lbl = {display:"block",fontSize:10,color:C.textDim,letterSpacing:1.5,marginBottom:5,textTransform:"uppercase"};
 
-// ── Logic ─────────────────────────────────────────────────────────────────────
+// ── JSONBin ───────────────────────────────────────────────────────────────────
 
-function scoreItem(item) {
+const JSONBIN_KEY = import.meta.env.VITE_JSONBIN_KEY || "";
+const JSONBIN_BASE = "https://api.jsonbin.io/v3/b";
+
+async function jbCreate(data) {
+  const r = await fetch(JSONBIN_BASE, {
+    method:"POST",
+    headers:{"Content-Type":"application/json","X-Master-Key":JSONBIN_KEY,"X-Bin-Name":"BloodHunt-GearInventory","X-Bin-Private":"false"},
+    body:JSON.stringify(data)
+  });
+  const d = await r.json();
+  if (!d.metadata?.id) throw new Error("Failed to create bin: " + JSON.stringify(d));
+  return d.metadata.id;
+}
+
+async function jbRead(binId) {
+  const r = await fetch(`${JSONBIN_BASE}/${binId}/latest`,{headers:{"X-Master-Key":JSONBIN_KEY}});
+  const d = await r.json();
+  if (!d.record) throw new Error("Failed to read bin");
+  return d.record;
+}
+
+async function jbUpdate(binId, data) {
+  const r = await fetch(`${JSONBIN_BASE}/${binId}`,{
+    method:"PUT",
+    headers:{"Content-Type":"application/json","X-Master-Key":JSONBIN_KEY},
+    body:JSON.stringify(data)
+  });
+  const d = await r.json();
+  if (!d.record) throw new Error("Failed to update bin");
+}
+
+// ── Gear Scanning ─────────────────────────────────────────────────────────────
+
+async function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(",")[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+async function scanGearCard(base64, mediaType, apiKey) {
+  const statList = ALL_STATS.map(s => `"${s}"`).join(", ");
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json",
+      "x-api-key":apiKey,
+      "anthropic-version":"2023-06-01",
+      "anthropic-dangerous-direct-browser-access":"true"
+    },
+    body:JSON.stringify({
+      model:"claude-sonnet-4-20250514",
+      max_tokens:1000,
+      messages:[{role:"user",content:[
+        {type:"image",source:{type:"base64",media_type:mediaType,data:base64}},
+        {type:"text",text:`Read this Marvel Rivals Blood Hunt gear card. If two cards appear side by side, read ONLY the LEFT (selected) card. Extract ONLY the EXTENDED EFFECT rows, NOT the BASE EFFECT. Return ONLY valid JSON, no markdown:
+{"type":"Weapon|Accessory|Exclusive","name":"gear name","rating":7018,"extendedEffects":[{"grade":"S","stat":"exact stat name","value":"+443%"}]}
+Stat names must exactly match one of: ${statList}`}
+      ]}]
+    })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(()=>({}));
+    throw new Error(err.error?.message || `API error ${res.status}`);
+  }
+  const data = await res.json();
+  const text = data.content?.find(b=>b.type==="text")?.text || "";
+  const clean = text.replace(/```json|```/g,"").trim();
+  const parsed = JSON.parse(clean);
+  return {
+    id:`${Date.now()}${Math.random().toString(36).slice(2)}`,
+    type:parsed.type,
+    name:parsed.name,
+    rating:+parsed.rating,
+    extendedEffects:(parsed.extendedEffects||[]).filter(e=>e.stat)
+  };
+}
+
+// ── Scoring / Optimization ────────────────────────────────────────────────────
+      function scoreItem(item) {
   let s = (item.rating - 5500) / 200;
   for (const e of item.extendedEffects||[]) {
     if (!e.stat||!e.grade) continue;
@@ -136,16 +218,22 @@ function GearCard({item,onDelete,highlight}) {
 }
 
 // ── Add Tab ───────────────────────────────────────────────────────────────────
-
 const emptyFx = ()=>({grade:"S",stat:"",value:""});
 const blankForm = (type="Weapon")=>({type,name:"",rating:"",extendedEffects:Array(5).fill(null).map(emptyFx)});
 
+const STATUS_COLOR = { pending:"#7a7090", scanning:"#e8c84a", done:"#4ade80", error:"#f87171" };
+const STATUS_LABEL = { pending:"Queued", scanning:"⚡ Scanning…", done:"✓ Done", error:"✗ Error" };
+
 function AddTab({form,setForm,addItem,flash,onBulkImport}) {
-  const [mode,setMode] = useState("import");
+  const [mode,setMode] = useState("scan");
   const [jsonText,setJsonText] = useState("");
   const [msg,setMsg] = useState({text:"",ok:true});
+  const [photos,setPhotos] = useState([]);
+  const [scanning,setScanning] = useState(false);
+  const fileRef = useRef(null);
 
   const setFx=(idx,field,val)=>setForm(f=>({...f,extendedEffects:f.extendedEffects.map((e,i)=>i===idx?{...e,[field]:val}:e)}));
+
   const handleImport = () => {
     try {
       let parsed = JSON.parse(jsonText.trim());
@@ -158,34 +246,148 @@ function AddTab({form,setForm,addItem,flash,onBulkImport}) {
       setTimeout(()=>setMsg({text:"",ok:true}),2500);
     } catch { setMsg({text:"⚠ Invalid JSON — check format.",ok:false}); }
   };
+
+  const handleFileSelect = (e) => {
+    const files = Array.from(e.target.files||[]);
+    if (!files.length) return;
+    const newPhotos = files.map(f=>({
+      id:Math.random().toString(36).slice(2),
+      file:f,
+      preview:URL.createObjectURL(f),
+      status:"pending",
+      result:null,
+      error:null
+    }));
+    setPhotos(p=>[...p,...newPhotos]);
+    e.target.value="";
+  };
+
+  const removePhoto = (id) => setPhotos(p=>p.filter(x=>x.id!==id));
+  const clearAll = () => { setPhotos([]); };
+
+  const scanAll = async () => {
+    const apiKey = localStorage.getItem("bh:apiKey");
+    if (!apiKey) { setMsg({text:"⚠ Add your Anthropic API key in the Settings tab first.",ok:false}); return; }
+    const pending = photos.filter(p=>p.status==="pending");
+    if (!pending.length) return;
+    setScanning(true); setMsg({text:"",ok:true});
+
+    const processOne = async (photo) => {
+      setPhotos(prev=>prev.map(p=>p.id===photo.id?{...p,status:"scanning"}:p));
+      try {
+        const b64 = await fileToBase64(photo.file);
+        const result = await scanGearCard(b64, photo.file.type||"image/jpeg", apiKey);
+        setPhotos(prev=>prev.map(p=>p.id===photo.id?{...p,status:"done",result}:p));
+      } catch(err) {
+        setPhotos(prev=>prev.map(p=>p.id===photo.id?{...p,status:"error",error:err.message}:p));
+      }
+    };
+
+    // Batch of 3 to avoid rate limits
+    for (let i=0; i<pending.length; i+=3) {
+      await Promise.all(pending.slice(i,i+3).map(processOne));
+    }
+    setScanning(false);
+  };
+
+  const addScanned = () => {
+    const successful = photos.filter(p=>p.status==="done"&&p.result);
+    if (!successful.length) return;
+    onBulkImport(successful.map(p=>p.result));
+    setPhotos([]);
+    setMsg({text:`✓ Added ${successful.length} items to inventory`,ok:true});
+    setTimeout(()=>setMsg({text:"",ok:true}),2500);
+  };
+
+  const doneCount = photos.filter(p=>p.status==="done").length;
+  const errorCount = photos.filter(p=>p.status==="error").length;
+  const pendingCount = photos.filter(p=>p.status==="pending").length;
+
   return (
     <div style={{maxWidth:680,margin:"0 auto"}}>
+      {/* Mode tabs */}
       <div style={{display:"flex",gap:0,marginBottom:20,border:`1px solid ${C.border}`,borderRadius:7,overflow:"hidden"}}>
-        {[["import","⚡ Paste from Claude"],["manual","✏ Manual Entry"]].map(([id,label])=>(
-          <button key={id} onClick={()=>setMode(id)} style={{flex:1,padding:"10px 0",background:mode===id?C.surface:"transparent",border:"none",borderBottom:`2px solid ${mode===id?C.gold:"transparent"}`,color:mode===id?C.gold:C.textDim,fontFamily:"'Courier New',monospace",fontSize:12,letterSpacing:1,cursor:"pointer"}}>{label}</button>
+        {[["scan","📷 Scan Photos"],["import","⚡ Paste JSON"],["manual","✏ Manual"]].map(([id,label])=>(
+          <button key={id} onClick={()=>setMode(id)} style={{flex:1,padding:"10px 0",background:mode===id?C.surface:"transparent",border:"none",borderBottom:`2px solid ${mode===id?C.gold:"transparent"}`,color:mode===id?C.gold:C.textDim,fontFamily:"'Courier New',monospace",fontSize:11,letterSpacing:1,cursor:"pointer"}}>{label}</button>
         ))}
       </div>
 
-      {mode==="import" ? (
+      {msg.text&&<p style={{margin:"0 0 14px",color:msg.ok?C.green:"#f87171",fontSize:12}}>{msg.text}</p>}
+
+      {/* ── SCAN MODE ── */}
+      {mode==="scan"&&(
+        <div>
+          <div style={{background:"#0d0d1f",border:`1px solid ${C.border}`,borderRadius:8,padding:"12px 16px",marginBottom:16}}>
+            <p style={{margin:"0 0 4px",color:C.gold,fontSize:12,fontWeight:700,letterSpacing:1}}>📷 MULTI-PHOTO SCAN</p>
+            <p style={{margin:0,color:C.textDim,fontSize:12,lineHeight:1.6}}>Select up to 10 gear card screenshots. Claude reads each one and extracts stats automatically.</p>
+          </div>
+
+          {/* File picker */}
+          <label htmlFor="gear-photos" style={{display:"block",padding:"12px",background:"#0d0d1f",border:`1.5px dashed ${C.border}`,borderRadius:8,textAlign:"center",cursor:"pointer",marginBottom:14,color:C.purpleLight,fontSize:13,fontWeight:700,letterSpacing:1}}>
+            + SELECT PHOTOS
+          </label>
+          <input id="gear-photos" ref={fileRef} type="file" accept="image/*" multiple onChange={handleFileSelect} style={{display:"none"}}/>
+
+          {/* Photo grid */}
+          {photos.length>0&&(
+            <div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(90px,1fr))",gap:8,marginBottom:14}}>
+                {photos.map(p=>(
+                  <div key={p.id} style={{position:"relative",borderRadius:6,overflow:"hidden",border:`2px solid ${STATUS_COLOR[p.status]}`,background:C.surface}}>
+                    <img src={p.preview} alt="" style={{width:"100%",height:80,objectFit:"cover",display:"block"}}/>
+                    <div style={{padding:"3px 5px",background:"rgba(0,0,0,0.8)",fontSize:9,color:STATUS_COLOR[p.status],textAlign:"center",letterSpacing:0.5}}>
+                      {STATUS_LABEL[p.status]}
+                    </div>
+                    {p.status==="error"&&<div style={{padding:"2px 4px",background:"rgba(0,0,0,0.9)",fontSize:8,color:"#f87171",textAlign:"center"}}>{p.error?.slice(0,30)}</div>}
+                    {p.status==="pending"&&(
+                      <button onClick={()=>removePhoto(p.id)} style={{position:"absolute",top:2,right:2,background:"rgba(0,0,0,0.7)",border:"none",color:"#f87171",borderRadius:3,width:18,height:18,cursor:"pointer",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>✕</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Status summary */}
+              <div style={{display:"flex",gap:12,marginBottom:12,fontSize:12,color:C.textDim}}>
+                {pendingCount>0&&<span>⏳ {pendingCount} queued</span>}
+                {doneCount>0&&<span style={{color:C.green}}>✓ {doneCount} done</span>}
+                {errorCount>0&&<span style={{color:"#f87171"}}>✗ {errorCount} failed</span>}
+                <button onClick={clearAll} style={{marginLeft:"auto",background:"transparent",border:"none",color:C.textDim,cursor:"pointer",fontSize:11,fontFamily:"'Courier New',monospace"}}>Clear all</button>
+              </div>
+
+              <div style={{display:"flex",gap:10}}>
+                <button onClick={scanAll} disabled={scanning||pendingCount===0} style={{flex:2,padding:"12px 0",background:scanning?"#111":"#130f00",border:`2px solid ${scanning||pendingCount===0?C.border:C.gold}`,borderRadius:7,color:scanning||pendingCount===0?C.textDim:C.gold,fontWeight:700,fontSize:13,letterSpacing:2,cursor:scanning||pendingCount===0?"not-allowed":"pointer",fontFamily:"'Courier New',monospace"}}>
+                  {scanning?"⚡ SCANNING…":"⚡ SCAN ALL"}
+                </button>
+                {doneCount>0&&(
+                  <button onClick={addScanned} style={{flex:1,padding:"12px 0",background:C.greenDim,border:`2px solid ${C.green}`,borderRadius:7,color:C.green,fontWeight:700,fontSize:13,letterSpacing:1,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>
+                    ✓ ADD {doneCount}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── PASTE JSON MODE ── */}
+      {mode==="import"&&(
         <div>
           <div style={{background:"#0d0d1f",border:`1px solid ${C.border}`,borderRadius:8,padding:"12px 16px",marginBottom:16}}>
             <p style={{margin:"0 0 4px",color:C.gold,fontSize:12,fontWeight:700,letterSpacing:1}}>WORKFLOW</p>
-            <p style={{margin:0,color:C.textDim,fontSize:12,lineHeight:1.7}}>
-              1. Send gear card photos to Claude in chat<br/>
-              2. Claude outputs a JSON block<br/>
-              3. Copy &amp; paste it below → Import
-            </p>
+            <p style={{margin:0,color:C.textDim,fontSize:12,lineHeight:1.7}}>1. Send gear card photos to Claude in chat<br/>2. Claude outputs a JSON block<br/>3. Copy &amp; paste it below → Import</p>
           </div>
           <label style={lbl}>Paste JSON (single item or array)</label>
           <textarea value={jsonText} onChange={e=>setJsonText(e.target.value)}
             placeholder={'[{"type":"Weapon","name":"Gaea Sigil","rating":7055,...}]'}
             style={{...inp,height:160,resize:"vertical",fontSize:12,lineHeight:1.5}}/>
-          {msg.text&&<p style={{margin:"8px 0 0",color:msg.ok?C.green:"#f87171",fontSize:12}}>{msg.text}</p>}
           <button onClick={handleImport} style={{width:"100%",padding:"13px 0",background:"#130f00",border:`2px solid ${C.gold}`,borderRadius:7,color:C.gold,fontWeight:700,fontSize:14,letterSpacing:2.5,cursor:"pointer",fontFamily:"'Courier New',monospace",marginTop:10}}>
             ⚡ IMPORT
           </button>
         </div>
-      ) : (
+      )}
+
+      {/* ── MANUAL MODE ── */}
+      {mode==="manual"&&(
         <div>
           <div style={{marginBottom:20}}>
             <label style={lbl}>Gear Type</label>
@@ -230,13 +432,16 @@ function AddTab({form,setForm,addItem,flash,onBulkImport}) {
 }
 
 // ── Inventory Tab ─────────────────────────────────────────────────────────────
-
 function InventoryTab({items,filterType,setFilterType,sortBy,setSortBy,deleteItem,counts,onExport,onRestoreAll}) {
   const [restoreText,setRestoreText] = useState("");
   const [showRestore,setShowRestore] = useState(false);
   const [restoreMsg,setRestoreMsg] = useState({text:"",ok:true});
   const [exportText,setExportText] = useState("");
   const [showExport,setShowExport] = useState(false);
+  const [cloudMsg,setCloudMsg] = useState("");
+  const [cloudLoading,setCloudLoading] = useState("");
+
+  const getBinId = () => localStorage.getItem("bh:binId");
 
   const handleExport = () => {
     const clean = items.map(({_score,...rest})=>rest);
@@ -244,8 +449,9 @@ function InventoryTab({items,filterType,setFilterType,sortBy,setSortBy,deleteIte
     setExportText(json);
     setShowExport(true);
     setShowRestore(false);
-    onExport(json); 
+    onExport(json);
   };
+
   const handleRestore = () => {
     try {
       let parsed = JSON.parse(restoreText.trim());
@@ -258,50 +464,89 @@ function InventoryTab({items,filterType,setFilterType,sortBy,setSortBy,deleteIte
       setTimeout(()=>setRestoreMsg({text:"",ok:true}),2500);
     } catch { setRestoreMsg({text:"⚠ Invalid JSON",ok:false}); }
   };
+
+  const loadFromCloud = async () => {
+    let binId = getBinId();
+    if (!binId) { setCloudMsg("⚠ No cloud storage set up. Go to Settings → Setup Cloud Storage."); return; }
+    setCloudLoading("load"); setCloudMsg("");
+    try {
+      const data = await jbRead(binId);
+      if (!Array.isArray(data)) throw new Error("Unexpected data format");
+      onRestoreAll(data.filter(i=>i.type&&i.name&&i.rating));
+      setCloudMsg(`✓ Loaded ${data.length} items from cloud`);
+    } catch(err) { setCloudMsg(`⚠ Load failed: ${err.message}`); }
+    finally { setCloudLoading(""); setTimeout(()=>setCloudMsg(""),3000); }
+  };
+
+  const saveToCloud = async () => {
+    let binId = getBinId();
+    setCloudLoading("save"); setCloudMsg("");
+    try {
+      const clean = items.map(({_score,...rest})=>rest);
+      if (!binId) {
+        binId = await jbCreate(clean);
+        localStorage.setItem("bh:binId", binId);
+        setCloudMsg(`✓ Cloud storage created & saved (${clean.length} items)`);
+      } else {
+        await jbUpdate(binId, clean);
+        setCloudMsg(`✓ Saved ${clean.length} items to cloud`);
+      }
+    } catch(err) { setCloudMsg(`⚠ Save failed: ${err.message}`); }
+    finally { setCloudLoading(""); setTimeout(()=>setCloudMsg(""),3000); }
+  };
+
+  const binId = getBinId();
+
   return (
     <div>
+      {/* Cloud storage bar */}
+      <div style={{background:"#0d0d1f",border:`1px solid ${C.border}`,borderRadius:8,padding:"12px 14px",marginBottom:16}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:8}}>
+          <p style={{margin:0,color:C.gold,fontSize:11,fontWeight:700,letterSpacing:1,flex:1}}>
+            ☁ CLOUD STORAGE {binId?<span style={{color:C.green,fontWeight:400}}>(connected)</span>:<span style={{color:"#f87171",fontWeight:400}}>(not set up)</span>}
+          </p>
+        </div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <button onClick={loadFromCloud} disabled={!!cloudLoading} style={{flex:1,padding:"8px 0",background:cloudLoading==="load"?"#111":"#0d0d2e",border:`1.5px solid ${cloudLoading?"#333":"#7b68ee"}`,borderRadius:5,color:cloudLoading?"#555":"#a78bfa",fontWeight:700,fontSize:11,letterSpacing:1,cursor:cloudLoading?"wait":"pointer",fontFamily:"'Courier New',monospace"}}>
+            {cloudLoading==="load"?"⏳ Loading…":"☁ Load from Cloud"}
+          </button>
+          <button onClick={saveToCloud} disabled={!!cloudLoading||items.length===0} style={{flex:1,padding:"8px 0",background:cloudLoading==="save"?"#111":"#0d1a0a",border:`1.5px solid ${cloudLoading||items.length===0?"#333":C.green}`,borderRadius:5,color:cloudLoading||items.length===0?"#555":C.green,fontWeight:700,fontSize:11,letterSpacing:1,cursor:cloudLoading||items.length===0?"not-allowed":"pointer",fontFamily:"'Courier New',monospace"}}>
+            {cloudLoading==="save"?"⏳ Saving…":"💾 Save to Cloud"}
+          </button>
+        </div>
+        {cloudMsg&&<p style={{margin:"8px 0 0",fontSize:11,color:cloudMsg.startsWith("✓")?C.green:"#f87171"}}>{cloudMsg}</p>}
+      </div>
+
       {/* Export / Restore bar */}
       <div style={{background:"#0d0d1f",border:`1px solid ${C.border}`,borderRadius:8,padding:"12px 14px",marginBottom:16}}>
         <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
           <div style={{flex:1}}>
-            <p style={{margin:0,color:C.gold,fontSize:11,fontWeight:700,letterSpacing:1}}>BACKUP YOUR INVENTORY</p>
-            <p style={{margin:"2px 0 0",color:C.textDim,fontSize:11}}>Export to save a backup, or paste an exported JSON profile to restore.</p>
+            <p style={{margin:0,color:C.textDim,fontSize:11,fontWeight:700,letterSpacing:1}}>LOCAL BACKUP</p>
+            <p style={{margin:"2px 0 0",color:C.textDim,fontSize:10}}>Export JSON to save manually, or paste to restore.</p>
           </div>
           <button onClick={handleExport} disabled={items.length===0} style={{padding:"7px 14px",background:showExport?"#0d2e15":"#130f00",border:`1.5px solid ${showExport?C.green:C.gold}`,borderRadius:5,color:showExport?C.green:C.gold,fontWeight:700,fontSize:11,letterSpacing:1,cursor:items.length===0?"not-allowed":"pointer",fontFamily:"'Courier New',monospace",whiteSpace:"nowrap"}}>
-            {showExport?"✓ Showing Export":"📋 Export JSON"}
+            {showExport?"✓ Showing":"📋 Export"}
           </button>
           <button onClick={()=>{setShowRestore(s=>!s);setShowExport(false);}} style={{padding:"7px 14px",background:showRestore?C.surface:"transparent",border:`1.5px solid ${C.border}`,borderRadius:5,color:C.textDim,fontWeight:700,fontSize:11,letterSpacing:1,cursor:"pointer",fontFamily:"'Courier New',monospace",whiteSpace:"nowrap"}}>
             {showRestore?"▲ Cancel":"↩ Restore"}
           </button>
         </div>
-
-        {/* Export textarea — user selects and copies manually */}
         {showExport&&(
           <div style={{marginTop:12}}>
-            <p style={{margin:"0 0 6px",color:C.green,fontSize:11,fontWeight:700}}>
-              ✓ {items.length} items — select all text below and copy to your notes app:
-            </p>
-            <textarea
-              readOnly
-              value={exportText}
-              onFocus={e=>e.target.select()}
-              style={{...inp,height:140,resize:"vertical",fontSize:10,lineHeight:1.4,color:C.textDim}}
-            />
-            <p style={{margin:"4px 0 0",color:C.textDim,fontSize:10}}>Tap the text area, then select all (long press → Select All) and copy.</p>
+            <p style={{margin:"0 0 6px",color:C.green,fontSize:11,fontWeight:700}}>✓ {items.length} items — select all and copy:</p>
+            <textarea readOnly value={exportText} onFocus={e=>e.target.select()} style={{...inp,height:120,resize:"vertical",fontSize:10,lineHeight:1.4,color:C.textDim}}/>
           </div>
         )}
-
         {restoreMsg.text&&<p style={{margin:"8px 0 0",color:restoreMsg.ok?C.green:"#f87171",fontSize:11}}>{restoreMsg.text}</p>}
         {showRestore&&(
           <div style={{marginTop:12}}>
-            <p style={{margin:"0 0 6px",color:C.textDim,fontSize:11}}>Paste your previously exported JSON to restore inventory (replaces current):</p>
             <textarea value={restoreText} onChange={e=>setRestoreText(e.target.value)} placeholder="Paste exported JSON here..." style={{...inp,height:100,resize:"vertical",fontSize:11}}/>
             <button onClick={handleRestore} style={{marginTop:8,padding:"8px 16px",background:"#130f00",border:`1.5px solid ${C.gold}`,borderRadius:5,color:C.gold,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>↩ Restore Inventory</button>
           </div>
         )}
       </div>
 
-      {/* Filter / sort bar */}
+      {/* Filter / sort */}
       <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
         {["All","Weapon","Accessory","Exclusive"].map(t=>(
           <button key={t} onClick={()=>setFilterType(t)} style={{padding:"6px 14px",background:filterType===t?"#1a1200":"transparent",border:`1.5px solid ${filterType===t?C.gold:C.border}`,color:filterType===t?C.gold:C.textDim,borderRadius:5,cursor:"pointer",fontSize:12,letterSpacing:1,fontFamily:"'Courier New',monospace"}}>
@@ -328,8 +573,7 @@ function InventoryTab({items,filterType,setFilterType,sortBy,setSortBy,deleteIte
 }
 
 // ── Optimize Tab ──────────────────────────────────────────────────────────────
-
-function OptimizeTab({result,runOptimize,counts}) {
+      function OptimizeTab({result,runOptimize,counts}) {
   const hasAll=counts.Weapon>0&&counts.Accessory>0&&counts.Exclusive>0;
   const covered=result?MANDATORY_ENH.filter(m=>[result.weapon,result.accessory,result.exclusive].some(p=>p.extendedEffects?.some(e=>e.stat===m))):[];
   const whichPiece=m=>result?[result.weapon,result.accessory,result.exclusive].find(p=>p.extendedEffects?.some(e=>e.stat===m))?.type:null;
@@ -338,8 +582,17 @@ function OptimizeTab({result,runOptimize,counts}) {
       <div style={{background:C.surface,border:`1px solid #2a1a3a`,borderRadius:8,padding:"12px 14px",marginBottom:20}}>
         <h3 style={{color:C.gold,margin:"0 0 12px",fontSize:12,letterSpacing:2}}>BUILD: THOR RUNE AWAKENING — PRECISION</h3>
         <div style={{display:"flex",gap:24,flexWrap:"wrap"}}>
-          <div><p style={{color:C.textDim,margin:"0 0 6px",fontSize:10,letterSpacing:1.5}}>MANDATORY ENHANCEMENTS</p>{MANDATORY_ENH.map(m=><div key={m} style={{color:C.purpleLight,fontSize:12,marginBottom:3}}>⚡ {m}</div>)}<div style={{color:"#fb923c",fontSize:12,marginTop:6}}>⚡ High-Speed Shock on ≥2 pieces</div></div>
-          <div><p style={{color:C.textDim,margin:"0 0 6px",fontSize:10,letterSpacing:1.5}}>PRIORITY STATS</p>{Object.entries(STAT_W).filter(([,v])=>v>=4).sort((a,b)=>b[1]-a[1]).map(([k,v])=><div key={k} style={{fontSize:12,marginBottom:3,color:C.text}}>{k} <span style={{color:C.gold}}>×{v}</span></div>)}</div>
+          <div>
+            <p style={{color:C.textDim,margin:"0 0 6px",fontSize:10,letterSpacing:1.5}}>MANDATORY ENHANCEMENTS</p>
+            {MANDATORY_ENH.map(m=><div key={m} style={{color:C.purpleLight,fontSize:12,marginBottom:3}}>⚡ {m}</div>)}
+            <div style={{color:"#fb923c",fontSize:12,marginTop:6}}>⚡ High-Speed Shock on ≥2 pieces</div>
+          </div>
+          <div>
+            <p style={{color:C.textDim,margin:"0 0 6px",fontSize:10,letterSpacing:1.5}}>PRIORITY STATS</p>
+            {Object.entries(STAT_W).filter(([,v])=>v>=4).sort((a,b)=>b[1]-a[1]).map(([k,v])=>(
+              <div key={k} style={{fontSize:12,marginBottom:3,color:C.text}}>{k} <span style={{color:C.gold}}>×{v}</span></div>
+            ))}
+          </div>
         </div>
       </div>
       <div style={{display:"flex",gap:10,marginBottom:16}}>
@@ -376,8 +629,90 @@ function OptimizeTab({result,runOptimize,counts}) {
   );
 }
 
+// ── Settings Tab ──────────────────────────────────────────────────────────────
+
+function SettingsTab({itemCount}) {
+  const [apiKey,setApiKey] = useState(()=>localStorage.getItem("bh:apiKey")||"");
+  const [binId,setBinId] = useState(()=>localStorage.getItem("bh:binId")||"");
+  const [apiSaved,setApiSaved] = useState(false);
+  const [cloudMsg,setCloudMsg] = useState("");
+  const [cloudLoading,setCloudLoading] = useState(false);
+
+  const saveApiKey = () => {
+    localStorage.setItem("bh:apiKey", apiKey.trim());
+    setApiSaved(true); setTimeout(()=>setApiSaved(false),1500);
+  };
+
+  const setupCloud = async () => {
+    setCloudLoading(true); setCloudMsg("");
+    try {
+      const id = await jbCreate([]);
+      localStorage.setItem("bh:binId", id);
+      setBinId(id);
+      setCloudMsg(`✓ Cloud storage created! Bin ID: ${id}`);
+    } catch(err) { setCloudMsg(`⚠ ${err.message}`); }
+    finally { setCloudLoading(false); }
+  };
+
+  const clearBinId = () => {
+    localStorage.removeItem("bh:binId");
+    setBinId("");
+    setCloudMsg("Cloud storage disconnected.");
+  };
+
+  return (
+    <div style={{maxWidth:600,margin:"0 auto"}}>
+      {/* Anthropic API Key */}
+      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"16px",marginBottom:16}}>
+        <h3 style={{color:C.gold,margin:"0 0 6px",fontSize:12,letterSpacing:2}}>ANTHROPIC API KEY</h3>
+        <p style={{color:C.textDim,fontSize:11,margin:"0 0 12px",lineHeight:1.6}}>Required for the 📷 Scan Photos feature. Get yours at <span style={{color:C.purpleLight}}>console.anthropic.com</span> → API Keys. Stored locally only.</p>
+        <div style={{display:"flex",gap:8}}>
+          <input
+            type="password"
+            value={apiKey}
+            onChange={e=>setApiKey(e.target.value)}
+            placeholder="sk-ant-..."
+            style={{...inp,flex:1}}
+          />
+          <button onClick={saveApiKey} style={{padding:"8px 16px",background:apiSaved?C.greenDim:"#130f00",border:`1.5px solid ${apiSaved?C.green:C.gold}`,borderRadius:5,color:apiSaved?C.green:C.gold,fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'Courier New',monospace",whiteSpace:"nowrap"}}>
+            {apiSaved?"✓ Saved":"Save"}
+          </button>
+        </div>
+        {apiKey&&<p style={{margin:"8px 0 0",fontSize:10,color:C.green}}>✓ API key configured</p>}
+      </div>
+
+      {/* JSONBin Cloud Storage */}
+      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"16px",marginBottom:16}}>
+        <h3 style={{color:C.gold,margin:"0 0 6px",fontSize:12,letterSpacing:2}}>CLOUD STORAGE (JSONBIN)</h3>
+        <p style={{color:C.textDim,fontSize:11,margin:"0 0 12px",lineHeight:1.6}}>Stores your inventory in the cloud so it loads on any device. Uses your pre-configured JSONBin account.</p>
+        {binId ? (
+          <div>
+            <p style={{color:C.green,fontSize:11,margin:"0 0 10px"}}>✓ Connected — Bin ID: <span style={{color:C.textDim,fontSize:10}}>{binId}</span></p>
+            <p style={{color:C.textDim,fontSize:11,margin:"0 0 10px"}}>{itemCount} items currently in local inventory. Use Load/Save in the Inventory tab.</p>
+            <button onClick={clearBinId} style={{padding:"7px 14px",background:"transparent",border:`1.5px solid #3a1010`,borderRadius:5,color:"#884444",fontWeight:700,fontSize:11,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>Disconnect</button>
+          </div>
+        ) : (
+          <button onClick={setupCloud} disabled={cloudLoading} style={{width:"100%",padding:"11px 0",background:cloudLoading?"#111":"#0d0d2e",border:`1.5px solid ${cloudLoading?"#333":"#7b68ee"}`,borderRadius:6,color:cloudLoading?"#555":"#a78bfa",fontWeight:700,fontSize:13,letterSpacing:1,cursor:cloudLoading?"wait":"pointer",fontFamily:"'Courier New',monospace"}}>
+            {cloudLoading?"⏳ Setting up…":"☁ Setup Cloud Storage"}
+          </button>
+        )}
+        {cloudMsg&&<p style={{margin:"10px 0 0",fontSize:11,color:cloudMsg.startsWith("✓")?C.green:"#f87171"}}>{cloudMsg}</p>}
+      </div>
+
+      {/* About */}
+      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"16px"}}>
+        <h3 style={{color:C.gold,margin:"0 0 8px",fontSize:12,letterSpacing:2}}>ABOUT</h3>
+        <p style={{color:C.textDim,fontSize:11,margin:0,lineHeight:1.7}}>
+          Blood Hunt Gear Optimizer · Thor Rune Awakening · Precision Build<br/>
+          {itemCount} items in inventory
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ── App ───────────────────────────────────────────────────────────────────────
-export default function App() {
+      export default function App() {
   const [tab,setTab] = useState("add");
   const [items,setItems] = useState([]);
   const [form,setForm] = useState(blankForm());
@@ -389,37 +724,40 @@ export default function App() {
   const [exportJson,setExportJson] = useState("");
 
   useEffect(()=>{
-    (async()=>{
-      try{const r=localStorage.getItem("bh:gear:v1");if(r)setItems(JSON.parse(r));}catch{}
-      setLoading(false);
-    })();
+    try{const r=localStorage.getItem("bh:gear:v1");if(r)setItems(JSON.parse(r));}catch{}
+    setLoading(false);
   },[]);
-  const persist=next=>{try{localStorage.setItem("bh:gear:v1",JSON.stringify(next));}catch{}};
 
-  const addItem=async()=>{
+  const persist = next => { try{localStorage.setItem("bh:gear:v1",JSON.stringify(next));}catch{} };
+
+  const addItem = () => {
     if(!form.name.trim()||!form.rating) return;
     const item={id:`${Date.now()}${Math.random().toString(36).slice(2)}`,type:form.type,name:form.name.trim(),rating:+form.rating,extendedEffects:form.extendedEffects.filter(e=>e.stat)};
-    const next=[...items,item];setItems(next);await persist(next);
-    setForm(blankForm(form.type));setOptimResult(null);
-    setFlash(true);setTimeout(()=>setFlash(false),1000);
-  };
-  const bulkImport=async(parsed)=>{
-    const newItems=parsed.map(i=>({id:`${Date.now()}${Math.random().toString(36).slice(2)}`,type:i.type,name:i.name,rating:+i.rating,extendedEffects:(i.extendedEffects||[]).filter(e=>e.stat)}));
-    const next=[...items,...newItems];setItems(next);await persist(next);setOptimResult(null);
+    const next=[...items,item]; setItems(next); persist(next);
+    setForm(blankForm(form.type)); setOptimResult(null);
+    setFlash(true); setTimeout(()=>setFlash(false),1000);
   };
 
-  const restoreAll=async(parsed)=>{
+  const bulkImport = parsed => {
     const newItems=parsed.map(i=>({id:i.id||`${Date.now()}${Math.random().toString(36).slice(2)}`,type:i.type,name:i.name,rating:+i.rating,extendedEffects:(i.extendedEffects||[]).filter(e=>e.stat)}));
-    setItems(newItems);await persist(newItems);setOptimResult(null);
+    const next=[...items,...newItems]; setItems(next); persist(next); setOptimResult(null);
   };
 
-  const deleteItem=async id=>{const next=items.filter(i=>i.id!==id);setItems(next);await persist(next);setOptimResult(null);};
-  const runOptimize=()=>setOptimResult(optimize(items.filter(i=>i.type==="Weapon"),items.filter(i=>i.type==="Accessory"),items.filter(i=>i.type==="Exclusive")));
+  const restoreAll = parsed => {
+    const newItems=parsed.map(i=>({id:i.id||`${Date.now()}${Math.random().toString(36).slice(2)}`,type:i.type,name:i.name,rating:+i.rating,extendedEffects:(i.extendedEffects||[]).filter(e=>e.stat)}));
+    setItems(newItems); persist(newItems); setOptimResult(null);
+  };
+
+  const deleteItem = id => { const next=items.filter(i=>i.id!==id); setItems(next); persist(next); setOptimResult(null); };
+  const runOptimize = () => setOptimResult(optimize(items.filter(i=>i.type==="Weapon"),items.filter(i=>i.type==="Accessory"),items.filter(i=>i.type==="Exclusive")));
 
   const counts={Weapon:items.filter(i=>i.type==="Weapon").length,Accessory:items.filter(i=>i.type==="Accessory").length,Exclusive:items.filter(i=>i.type==="Exclusive").length};
   const displayItems=(filterType==="All"?items:items.filter(i=>i.type===filterType)).map(i=>({...i,_score:scoreItem(i)})).sort((a,b)=>sortBy==="rating"?b.rating-a.rating:b._score-a._score);
 
+  const TABS=[["add","ADD"],["inventory",`INVENTORY (${items.length})`],["optimize","⚡ OPTIMIZE"],["settings","⚙"]];
+
   if(loading) return <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",color:C.textDim}}>Loading...</div>;
+
   return (
     <div style={{minHeight:"100vh",background:C.bg,color:C.text,fontFamily:"'Courier New',Courier,monospace"}}>
       <div style={{background:"#07070e",borderBottom:`2px solid ${C.red}`,padding:"14px 20px"}}>
@@ -439,18 +777,16 @@ export default function App() {
         </div>
       </div>
       <div style={{background:"#07070e",display:"flex",borderBottom:`1px solid ${C.border}`}}>
-        {[["add","ADD GEAR"],["inventory",`INVENTORY (${items.length})`],["optimize","⚡ OPTIMIZE"]].map(([id,label])=>(
-          <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"11px 6px",background:tab===id?C.surface:"transparent",border:"none",borderBottom:`2px solid ${tab===id?C.gold:"transparent"}`,color:tab===id?C.gold:C.textDim,fontFamily:"'Courier New',monospace",fontSize:11,letterSpacing:1.5,cursor:"pointer"}}>{label}</button>
+        {TABS.map(([id,label])=>(
+          <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"11px 4px",background:tab===id?C.surface:"transparent",border:"none",borderBottom:`2px solid ${tab===id?C.gold:"transparent"}`,color:tab===id?C.gold:C.textDim,fontFamily:"'Courier New',monospace",fontSize:10,letterSpacing:1,cursor:"pointer"}}>{label}</button>
         ))}
       </div>
       <div style={{maxWidth:860,margin:"0 auto",padding:"20px 16px"}}>
         {tab==="add"&&<AddTab form={form} setForm={setForm} addItem={addItem} flash={flash} onBulkImport={bulkImport}/>}
         {tab==="inventory"&&<InventoryTab items={displayItems} filterType={filterType} setFilterType={setFilterType} sortBy={sortBy} setSortBy={setSortBy} deleteItem={deleteItem} counts={counts} onExport={setExportJson} onRestoreAll={restoreAll}/>}
         {tab==="optimize"&&<OptimizeTab result={optimResult} runOptimize={runOptimize} counts={counts}/>}
+        {tab==="settings"&&<SettingsTab itemCount={items.length}/>}
       </div>
     </div>
   );
-
-  //push
-  
-                                                    }
+      }
