@@ -281,7 +281,7 @@ function InventoryTab({items,filterType,setFilterType,sortBy,setSortBy,deleteIte
   const [cloudMsg,setCloudMsg] = useState("");
   const [cloudLoading,setCloudLoading] = useState("");
 
-  const getBinId = () => localStorage.getItem("bh:binId");
+  const getBinId = () => import.meta.env.VITE_BIN_ID || localStorage.getItem("bh:binId") || "";
 
   const handleExport = () => {
     const clean=items.map(({_score,...rest})=>rest);
@@ -474,8 +474,9 @@ function OptimizeTab({result,runOptimize,counts}) {
 
 function SettingsPanel({onClose,itemCount}) {
   const [apiKey,setApiKey] = useState(()=>localStorage.getItem("bh:apiKey")||"");
-  const [binKey,setBinKey] = useState(()=>localStorage.getItem("bh:binKey")||"");
-  const [binId,setBinId] = useState(()=>localStorage.getItem("bh:binId")||"");
+  const [binKey,setBinKey] = useState(()=>import.meta.env.VITE_BIN_KEY || localStorage.getItem("bh:binKey")||"");
+  const [binId,setBinId] = useState(()=>import.meta.env.VITE_BIN_ID || localStorage.getItem("bh:binId")||"");
+
   const [reqs,setReqs] = useState(()=>getReqs());
   const [apiSaved,setApiSaved] = useState(false);
   const [binKeySaved,setBinKeySaved] = useState(false);
@@ -488,16 +489,20 @@ function SettingsPanel({onClose,itemCount}) {
   const saveReqs  = () => { localStorage.setItem("bh:reqs",JSON.stringify(reqs)); setReqsSaved(true); setTimeout(()=>setReqsSaved(false),1500); };
   const updateReq = (k,v) => setReqs(r=>({...r,[k]:parseFloat(v)||0}));
 
-  const setupCloud = async () => {
-    if (!localStorage.getItem("bh:binKey")){setCloudMsg("⚠ Save your JSONBin Master Key first.");return;}
-    setCloudLoading(true); setCloudMsg("");
+    const setupCloud = async () => {
+    const activeKey = import.meta.env.VITE_BIN_KEY || localStorage.getItem("bh:binKey");
+    if (!activeKey){setCloudMsg("⚠ Save your JSONBin Master Key first.");return;}
+    setCloudLoading(true);
+    setCloudMsg("");
     try {
-      const id=await jbCreate([]);
+      // Seed with an initial configuration item object block to satisfy JSONBin v3 structure constraints
+      const id = await jbCreate([{"id":"init","name":"Seed Entry","rating":5500,"extendedEffects":[]}]);
       localStorage.setItem("bh:binId",id); setBinId(id);
       setCloudMsg("✓ Cloud storage created!");
     } catch(err) { setCloudMsg(`⚠ ${err.message}`); }
     finally { setCloudLoading(false); }
   };
+
 
   const reqFields=[
     {key:"hss",label:"HSS min combined",unit:"%"},
