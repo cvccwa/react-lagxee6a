@@ -8,7 +8,7 @@ import { ALL_STATS } from "./config.js";
 
 const JSONBIN_BASE = "https://api.jsonbin.io/v3/b";
 // Check Vercel environment variables first, then fallback to local browser storage
-const getJsonBinKey = () => import.meta.env.VITE_BIN_KEY || localStorage.getItem("bh:binKey") || "";
+const getJsonBinKey = () => process.env.REACT_APP_BIN_KEY || localStorage.getItem("bh:binKey") || "";
 
 export async function jbCreate(data) {
   const r = await fetch(JSONBIN_BASE, {
