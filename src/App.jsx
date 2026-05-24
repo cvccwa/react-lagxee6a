@@ -540,26 +540,39 @@ function SettingsPanel({onClose,itemCount}) {
           </div>
 
           {/* JSONBin */}
+          {/* CLOUD STORAGE (JSONBIN) - FULL EXPOSED SAFETY-NET LAYOUT */}
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"16px",marginBottom:14}}>
             <h3 style={{color:C.gold,margin:"0 0 6px",fontSize:13,letterSpacing:1.5}}>CLOUD STORAGE (JSONBIN)</h3>
-            <p style={{color:C.textDim,fontSize:12,margin:"0 0 12px",lineHeight:1.6}}>Paste your JSONBin Master Key, then tap Setup. Get it from jsonbin.io → API Keys.</p>
+            <p style={{color:C.textDim,fontSize:12,margin:"0 0 12px",lineHeight:1.6}}>Tethered to system settings. Paste an existing Bin ID string to override or restore link configurations manually.</p>
+            
             <label style={{...lbl,fontSize:11}}>JSONBin Master Key</label>
             <div style={{display:"flex",gap:8,marginBottom:12}}>
               <input type="password" value={binKey} onChange={e=>setBinKey(e.target.value)} placeholder="$2a$10$..." style={{...inp,flex:1,fontSize:14,padding:"11px 12px"}}/>
               <button onClick={saveBinKey} style={{padding:"11px 16px",background:binKeySaved?C.greenDim:"#130f00",border:`1.5px solid ${binKeySaved?C.green:"#7b68ee"}`,borderRadius:8,color:binKeySaved?C.green:"#a78bfa",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"'Courier New',monospace",whiteSpace:"nowrap"}}>{binKeySaved?"✓":"Save"}</button>
             </div>
-            {binId?(
+
+            <label style={{...lbl,fontSize:11}}>Active Bin ID Link</label>
+            <div style={{display:"flex",gap:8,marginBottom:12}}>
+              <input type="text" value={binId} onChange={e=>{
+                const val = e.target.value.trim();
+                setBinId(val);
+                localStorage.setItem("bh:binId", val);
+              }} placeholder="Bypass Pointer empty — enter Bin ID here" style={{...inp,flex:1,fontSize:14,padding:"11px 12px"}}/>
+            </div>
+
+            {binId ? (
               <div>
-                <p style={{color:C.green,fontSize:12,margin:"0 0 10px"}}>✓ Connected — use Load/Save in Inventory.</p>
-                <button onClick={()=>{localStorage.removeItem("bh:binId");setBinId("");}} style={{padding:"10px 16px",background:"transparent",border:`1.5px solid #3a1010`,borderRadius:8,color:"#884444",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>Disconnect</button>
+                <p style={{color:C.green,fontSize:12,margin:"0 0 10px"}}>✓ Connected to Bin — use Load/Save in Inventory.</p>
+                <button onClick={()=>{localStorage.removeItem("bh:binId");setBinId("");}} style={{padding:"10px 16px",background:"transparent",border:`1px solid #3a1010`,borderRadius:8,color:"#884444",fontWeight:700,fontSize:12,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>Clear Override</button>
               </div>
-            ):(
+            ) : (
               <button onClick={setupCloud} disabled={cloudLoading||!binKey.trim()} style={{width:"100%",padding:"13px 0",background:cloudLoading||!binKey.trim()?"#111":"#0d0d2e",border:`1.5px solid ${cloudLoading||!binKey.trim()?"#333":"#7b68ee"}`,borderRadius:8,color:cloudLoading||!binKey.trim()?"#555":"#a78bfa",fontWeight:700,fontSize:14,cursor:cloudLoading||!binKey.trim()?"not-allowed":"pointer",fontFamily:"'Courier New',monospace"}}>
-                {cloudLoading?"⏳ Setting up…":"☁ Setup Cloud Storage"}
+                {cloudLoading ?"⏳ Setting up…":"☁ Setup Cloud Storage"}
               </button>
             )}
             {cloudMsg&&<p style={{margin:"10px 0 0",fontSize:12,color:cloudMsg.startsWith("✓")?C.green:"#f87171"}}>{cloudMsg}</p>}
           </div>
+
 
           {/* Build Requirements */}
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"16px",marginBottom:14}}>
