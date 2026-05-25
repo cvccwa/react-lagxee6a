@@ -27,7 +27,7 @@ function dedupeAgainstExisting(incoming, existing) {
 
 function TypeBadge({type}) {
   const tc=typeColors[type]||{};
-  return <span style={{background:tc.bg,border:`1px solid ${tc.border}`,color:tc.text,padding:"3px 10px",borderRadius:4,fontSize:12,fontWeight:700,letterSpacing:1}}>{(type||"").toUpperCase()}</span>;
+  return <span style={{background:tc.bg,border:`1px solid ${tc.border}`,color:tc.text,padding:"5px 12px",borderRadius:4,fontSize:13,fontWeight:700,letterSpacing:1}}>{(type||"").toUpperCase()}</span>;
 }
 
 function GearCard({item,onDelete,highlight}) {
@@ -35,23 +35,23 @@ function GearCard({item,onDelete,highlight}) {
   const mandatory=MANDATORY_ENH.filter(m=>item.extendedEffects?.some(e=>e.stat===m));
   return (
     <div style={{background:highlight?"#0a140a":C.surface,border:`1px solid ${highlight?"#2a4a2a":C.border}`,borderRadius:12,marginBottom:10,overflow:"hidden"}}>
-      <div onClick={()=>setExpanded(e=>!e)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 16px",cursor:"pointer",gap:8,minHeight:56}}>
+      <div onClick={()=>setExpanded(e=>!e)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 18px",cursor:"pointer",gap:8,minHeight:64}}>
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",flex:1,minWidth:0}}>
           <TypeBadge type={item.type}/>
-          <span style={{color:C.text,fontWeight:600,fontSize:16}}>{item.name}</span>
-          <span style={{color:C.gold,fontSize:15}}>★ {item.rating}</span>
+          <span style={{color:C.text,fontWeight:600,fontSize:17}}>{item.name}</span>
+          <span style={{color:C.gold,fontSize:16}}>★ {item.rating}</span>
         </div>
         <div style={{display:"flex",gap:10,alignItems:"center",flexShrink:0}}>
-          <span style={{color:C.gold,fontWeight:700,fontSize:14}}>{item._score??scoreItem(item)}</span>
-          <span style={{color:C.textDim,fontSize:18,userSelect:"none"}}>{expanded?"▲":"▼"}</span>
+          <span style={{color:C.gold,fontWeight:700,fontSize:15}}>{item._score??scoreItem(item)}</span>
+          <span style={{color:C.textDim,fontSize:20,userSelect:"none"}}>{expanded?"▲":"▼"}</span>
         </div>
       </div>
       {expanded&&(
         <div style={{padding:"0 16px 14px"}}>
           <div style={{display:"flex",flexDirection:"column",gap:7}}>
             {(item.extendedEffects||[]).filter(e=>e.stat).map((e,i)=>(
-              <div key={i} style={{display:"flex",gap:10,alignItems:"baseline",fontSize:15}}>
-                <span style={{color:GRADE_COLOR[e.grade]||C.textDim,fontWeight:700,minWidth:26}}>[{e.grade}]</span>
+              <div key={i} style={{display:"flex",gap:10,alignItems:"baseline",fontSize:16}}>
+                <span style={{color:GRADE_COLOR[e.grade]||C.textDim,fontWeight:700,minWidth:30}}>[{e.grade}]</span>
                 <span style={{color:MANDATORY_ENH.includes(e.stat)?C.purpleLight:ENHANCEMENTS.includes(e.stat)?"#a78bfa":C.text,fontWeight:MANDATORY_ENH.includes(e.stat)?600:400,flex:1}}>{e.stat}</span>
                 {e.value&&<span style={{color:C.gold,whiteSpace:"nowrap"}}>{String(e.value).startsWith("+")||String(e.value).startsWith("-")?"":"+"}{e.value}</span>}
               </div>
@@ -59,10 +59,10 @@ function GearCard({item,onDelete,highlight}) {
           </div>
           {mandatory.length>0&&(
             <div style={{display:"flex",gap:6,marginTop:12,flexWrap:"wrap"}}>
-              {mandatory.map(m=><span key={m} style={{background:C.purpleDim,border:"1px solid #5b2d8b",borderRadius:4,padding:"3px 9px",fontSize:12,color:C.purpleLight}}>⚡ {m.replace(" Enhancement","")}</span>)}
+              {mandatory.map(m=><span key={m} style={{background:C.purpleDim,border:"1px solid #5b2d8b",borderRadius:4,padding:"5px 11px",fontSize:13,color:C.purpleLight}}>⚡ {m.replace(" Enhancement","")}</span>)}
             </div>
           )}
-          {onDelete&&<button onClick={()=>onDelete(item.id)} style={{marginTop:12,padding:"10px 18px",background:"transparent",border:"1px solid #3a1010",color:"#884444",borderRadius:8,cursor:"pointer",fontSize:14,fontFamily:"'Courier New',monospace"}}>✕ Remove</button>}
+          {onDelete&&<button onClick={()=>onDelete(item.id)} style={{marginTop:12,padding:"13px 20px",background:"transparent",border:"1px solid #3a1010",color:"#884444",borderRadius:8,cursor:"pointer",fontSize:15,fontFamily:"'Courier New',monospace"}}>✕ Remove</button>}
         </div>
       )}
     </div>
@@ -147,7 +147,7 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items}) {
       {/* Mode tabs */}
       <div style={{display:"flex",border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",marginBottom:16,flexShrink:0}}>
         {[["scan","📷 Scan"],["import","⚡ Paste"],["manual","✏ Manual"]].map(([id,label])=>(
-          <button key={id} onClick={()=>setMode(id)} style={{flex:1,padding:"15px 0",background:mode===id?C.surface:"transparent",border:"none",borderBottom:`2px solid ${mode===id?C.gold:"transparent"}`,color:mode===id?C.gold:C.textDim,fontFamily:"'Courier New',monospace",fontSize:15,cursor:"pointer"}}>{label}</button>
+          <button key={id} onClick={()=>setMode(id)} style={{flex:1,padding:"18px 0",background:mode===id?C.surface:"transparent",border:"none",borderBottom:`2px solid ${mode===id?C.gold:"transparent"}`,color:mode===id?C.gold:C.textDim,fontFamily:"'Courier New',monospace",fontSize:16,cursor:"pointer"}}>{label}</button>
         ))}
       </div>
 
@@ -158,16 +158,16 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items}) {
         <div style={{display:"flex",flexDirection:"column",flex:1,gap:14,minHeight:0}}>
           {/* Info box */}
           <div style={{background:"#0d0d1f",border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 18px",flexShrink:0}}>
-            <p style={{margin:"0 0 5px",color:C.gold,fontSize:15,fontWeight:700}}>📷 MULTI-PHOTO SCAN</p>
-            <p style={{margin:0,color:C.textDim,fontSize:14,lineHeight:1.7}}>Select up to 10 gear card screenshots. Claude reads each card and extracts stats automatically.</p>
+            <p style={{margin:"0 0 5px",color:C.gold,fontSize:17,fontWeight:700}}>📷 MULTI-PHOTO SCAN</p>
+            <p style={{margin:0,color:C.textDim,fontSize:15,lineHeight:1.8}}>Select up to 10 gear card screenshots. Claude reads each card and extracts stats automatically.</p>
           </div>
 
           {!hasPhotos ? (
             /* No photos — big centered select button fills remaining space */
-            <label htmlFor="gear-photos" style={{display:"flex",alignItems:"center",justifyContent:"center",flex:1,background:"#0d0d1f",border:`2px dashed ${C.purpleLight}`,borderRadius:16,cursor:"pointer",color:C.purpleLight,fontSize:20,fontWeight:700,letterSpacing:1,flexDirection:"column",gap:12}}>
-              <span style={{fontSize:48}}>📷</span>
+            <label htmlFor="gear-photos" style={{display:"flex",alignItems:"center",justifyContent:"center",flex:1,background:"#0d0d1f",border:`3px dashed ${C.purpleLight}`,borderRadius:20,cursor:"pointer",color:C.purpleLight,fontSize:22,fontWeight:700,letterSpacing:1.5,flexDirection:"column",gap:16}}>
+              <span style={{fontSize:72}}>📷</span>
               <span>+ SELECT PHOTOS</span>
-              <span style={{fontSize:13,color:C.textDim,fontWeight:400}}>Tap to choose from camera roll</span>
+              <span style={{fontSize:15,color:C.textDim,fontWeight:400}}>Tap to choose from camera roll</span>
             </label>
           ) : (
             /* Photos queued — grid + actions */
@@ -176,17 +176,17 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items}) {
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
                   {photos.map(p=>(
                     <div key={p.id} style={{position:"relative",borderRadius:10,overflow:"hidden",border:`2px solid ${STATUS_COLOR[p.status]}`,background:C.surface}}>
-                      <img src={p.preview} alt="" style={{width:"100%",height:130,objectFit:"cover",display:"block"}}/>
-                      <div style={{padding:"6px 8px",background:"rgba(0,0,0,0.88)",fontSize:12,color:STATUS_COLOR[p.status],textAlign:"center",fontWeight:700}}>{STATUS_LABEL[p.status]}</div>
-                      {p.status==="error"&&<div style={{padding:"3px 8px",background:"rgba(0,0,0,0.9)",fontSize:11,color:"#f87171",textAlign:"center"}}>{p.error?.slice(0,40)}</div>}
-                      {p.status==="pending"&&<button onClick={()=>setPhotos(prev=>prev.filter(x=>x.id!==p.id))} style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.75)",border:"none",color:"#f87171",borderRadius:5,width:28,height:28,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>✕</button>}
+                      <img src={p.preview} alt="" style={{width:"100%",height:160,objectFit:"cover",display:"block"}}/>
+                      <div style={{padding:"8px 8px",background:"rgba(0,0,0,0.88)",fontSize:14,color:STATUS_COLOR[p.status],textAlign:"center",fontWeight:700}}>{STATUS_LABEL[p.status]}</div>
+                      {p.status==="error"&&<div style={{padding:"4px 8px",background:"rgba(0,0,0,0.9)",fontSize:13,color:"#f87171",textAlign:"center"}}>{p.error?.slice(0,40)}</div>}
+                      {p.status==="pending"&&<button onClick={()=>setPhotos(prev=>prev.filter(x=>x.id!==p.id))} style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.75)",border:"none",color:"#f87171",borderRadius:5,width:34,height:34,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>✕</button>}
                     </div>
                   ))}
                 </div>
               </div>
 
               {/* Status + add more */}
-              <div style={{display:"flex",gap:12,fontSize:14,color:C.textDim,alignItems:"center",flexShrink:0}}>
+              <div style={{display:"flex",gap:12,fontSize:15,color:C.textDim,alignItems:"center",flexShrink:0}}>
                 {pendingCount>0&&<span>⏳ {pendingCount} queued</span>}
                 {doneCount>0&&<span style={{color:C.green}}>✓ {doneCount} done</span>}
                 {errorCount>0&&<span style={{color:"#f87171"}}>✗ {errorCount} failed</span>}
@@ -196,8 +196,8 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items}) {
 
               {/* Action buttons */}
               <div style={{display:"flex",gap:10,flexShrink:0}}>
-                {pendingCount>0&&<button onClick={scanAll} disabled={scanning} style={{flex:2,padding:"18px 0",background:scanning?"#111":"#130f00",border:`2px solid ${scanning?C.border:C.gold}`,borderRadius:12,color:scanning?C.textDim:C.gold,fontWeight:700,fontSize:16,letterSpacing:2,cursor:scanning?"not-allowed":"pointer",fontFamily:"'Courier New',monospace"}}>{scanning?"⚡ SCANNING…":"⚡ SCAN ALL"}</button>}
-                {doneCount>0&&<button onClick={addScanned} style={{flex:1,padding:"18px 0",background:C.greenDim,border:`2px solid ${C.green}`,borderRadius:12,color:C.green,fontWeight:700,fontSize:16,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>✓ ADD {doneCount}</button>}
+                {pendingCount>0&&<button onClick={scanAll} disabled={scanning} style={{flex:2,padding:"22px 0",background:scanning?"#111":"#130f00",border:`2px solid ${scanning?C.border:C.gold}`,borderRadius:12,color:scanning?C.textDim:C.gold,fontWeight:700,fontSize:18,letterSpacing:2,cursor:scanning?"not-allowed":"pointer",fontFamily:"'Courier New',monospace"}}>{scanning?"⚡ SCANNING…":"⚡ SCAN ALL"}</button>}
+                {doneCount>0&&<button onClick={addScanned} style={{flex:1,padding:"22px 0",background:C.greenDim,border:`2px solid ${C.green}`,borderRadius:12,color:C.green,fontWeight:700,fontSize:18,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>✓ ADD {doneCount}</button>}
               </div>
             </div>
           )}
@@ -216,7 +216,7 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items}) {
             <label style={{...lbl,fontSize:13}}>Paste JSON (single item or array)</label>
             <textarea value={jsonText} onChange={e=>setJsonText(e.target.value)} placeholder={'[{"type":"Weapon","name":"Gaea Sigil","rating":7055,...}]'} style={{...inp,flex:1,resize:"none",fontSize:14,lineHeight:1.6,minHeight:160}}/>
           </div>
-          <button onClick={handleImport} style={{width:"100%",padding:"18px 0",background:"#130f00",border:`2px solid ${C.gold}`,borderRadius:12,color:C.gold,fontWeight:700,fontSize:16,letterSpacing:2,cursor:"pointer",fontFamily:"'Courier New',monospace",flexShrink:0}}>⚡ IMPORT</button>
+          <button onClick={handleImport} style={{width:"100%",padding:"22px 0",background:"#130f00",border:`2px solid ${C.gold}`,borderRadius:12,color:C.gold,fontWeight:700,fontSize:18,letterSpacing:2,cursor:"pointer",fontFamily:"'Courier New',monospace",flexShrink:0}}>⚡ IMPORT</button>
         </div>
       )}
 
@@ -228,7 +228,7 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items}) {
             <div style={{display:"flex",gap:8}}>
               {["Weapon","Accessory","Exclusive"].map(t=>{
                 const tc=typeColors[t];const active=form.type===t;
-                return <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"15px 0",background:active?tc.bg:"transparent",border:`2px solid ${active?tc.border:C.border}`,color:active?tc.text:C.textDim,borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:14,fontFamily:"'Courier New',monospace"}}>{t.toUpperCase()}</button>;
+                return <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"18px 0",background:active?tc.bg:"transparent",border:`2px solid ${active?tc.border:C.border}`,color:active?tc.text:C.textDim,borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:15,fontFamily:"'Courier New',monospace"}}>{t.toUpperCase()}</button>;
               })}
             </div>
           </div>
@@ -261,7 +261,7 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items}) {
               ))}
             </div>
           </div>
-          <button onClick={addItem} style={{width:"100%",padding:"18px 0",background:flash?C.greenDim:"#130f00",border:`2px solid ${flash?C.green:C.gold}`,borderRadius:12,color:flash?C.green:C.gold,fontWeight:700,fontSize:16,letterSpacing:2,cursor:"pointer",fontFamily:"'Courier New',monospace",transition:"all 0.15s"}}>
+          <button onClick={addItem} style={{width:"100%",padding:"22px 0",background:flash?C.greenDim:"#130f00",border:`2px solid ${flash?C.green:C.gold}`,borderRadius:12,color:flash?C.green:C.gold,fontWeight:700,fontSize:18,letterSpacing:2,cursor:"pointer",fontFamily:"'Courier New',monospace",transition:"all 0.15s"}}>
             {flash?"✓  ADDED":"+ ADD GEAR"}
           </button>
         </div>
@@ -330,25 +330,25 @@ function InventoryTab({items,filterType,setFilterType,sortBy,setSortBy,deleteIte
       {/* Cloud + backup — fixed */}
       <div style={{flexShrink:0,display:"flex",flexDirection:"column",gap:10}}>
         <div style={{background:"#0d0d1f",border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px"}}>
-          <p style={{margin:"0 0 10px",color:C.gold,fontSize:14,fontWeight:700,letterSpacing:1}}>
+          <p style={{margin:"0 0 10px",color:C.gold,fontSize:16,fontWeight:700,letterSpacing:1}}>
             ☁ CLOUD {getBinId()?<span style={{color:C.green,fontWeight:400}}>(connected)</span>:<span style={{color:"#f87171",fontWeight:400}}>(open Settings to connect)</span>}
           </p>
           <div style={{display:"flex",gap:10}}>
-            <button onClick={loadFromCloud} disabled={!!cloudLoading} style={{flex:1,padding:"14px 0",background:cloudLoading==="load"?"#111":"#0d0d2e",border:`1.5px solid ${cloudLoading?"#333":"#7b68ee"}`,borderRadius:10,color:cloudLoading?"#555":"#a78bfa",fontWeight:700,fontSize:15,cursor:cloudLoading?"wait":"pointer",fontFamily:"'Courier New',monospace"}}>
+            <button onClick={loadFromCloud} disabled={!!cloudLoading} style={{flex:1,padding:"18px 0",background:cloudLoading==="load"?"#111":"#0d0d2e",border:`1.5px solid ${cloudLoading?"#333":"#7b68ee"}`,borderRadius:10,color:cloudLoading?"#555":"#a78bfa",fontWeight:700,fontSize:17,cursor:cloudLoading?"wait":"pointer",fontFamily:"'Courier New',monospace"}}>
               {cloudLoading==="load"?"⏳ Loading…":"☁ Load"}
             </button>
-            <button onClick={saveToCloud} disabled={!!cloudLoading||items.length===0} style={{flex:1,padding:"14px 0",background:cloudLoading==="save"?"#111":"#0d1a0a",border:`1.5px solid ${cloudLoading||items.length===0?"#333":C.green}`,borderRadius:10,color:cloudLoading||items.length===0?"#555":C.green,fontWeight:700,fontSize:15,cursor:cloudLoading||items.length===0?"not-allowed":"pointer",fontFamily:"'Courier New',monospace"}}>
+            <button onClick={saveToCloud} disabled={!!cloudLoading||items.length===0} style={{flex:1,padding:"18px 0",background:cloudLoading==="save"?"#111":"#0d1a0a",border:`1.5px solid ${cloudLoading||items.length===0?"#333":C.green}`,borderRadius:10,color:cloudLoading||items.length===0?"#555":C.green,fontWeight:700,fontSize:17,cursor:cloudLoading||items.length===0?"not-allowed":"pointer",fontFamily:"'Courier New',monospace"}}>
               {cloudLoading==="save"?"⏳ Saving…":"💾 Save"}
             </button>
           </div>
-          {cloudMsg&&<p style={{margin:"10px 0 0",fontSize:14,color:cloudMsg.startsWith("✓")?C.green:"#f87171"}}>{cloudMsg}</p>}
+          {cloudMsg&&<p style={{margin:"10px 0 0",fontSize:15,color:cloudMsg.startsWith("✓")?C.green:"#f87171"}}>{cloudMsg}</p>}
         </div>
 
         <div style={{background:"#0d0d1f",border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 16px"}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <p style={{margin:0,color:C.textDim,fontSize:13,fontWeight:700,letterSpacing:1,flex:1}}>LOCAL BACKUP</p>
-            <button onClick={handleExport} disabled={items.length===0} style={{padding:"10px 16px",background:showExport?"#0d2e15":"#130f00",border:`1.5px solid ${showExport?C.green:C.gold}`,borderRadius:8,color:showExport?C.green:C.gold,fontWeight:700,fontSize:13,cursor:items.length===0?"not-allowed":"pointer",fontFamily:"'Courier New',monospace",whiteSpace:"nowrap"}}>{showExport?"✓ Showing":"📋 Export"}</button>
-            <button onClick={()=>{setShowRestore(s=>!s);setShowExport(false);}} style={{padding:"10px 16px",background:showRestore?C.surface:"transparent",border:`1.5px solid ${C.border}`,borderRadius:8,color:C.textDim,fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"'Courier New',monospace",whiteSpace:"nowrap"}}>{showRestore?"▲ Cancel":"↩ Restore"}</button>
+            <button onClick={handleExport} disabled={items.length===0} style={{padding:"12px 18px",background:showExport?"#0d2e15":"#130f00",border:`1.5px solid ${showExport?C.green:C.gold}`,borderRadius:8,color:showExport?C.green:C.gold,fontWeight:700,fontSize:15,cursor:items.length===0?"not-allowed":"pointer",fontFamily:"'Courier New',monospace",whiteSpace:"nowrap"}}>{showExport?"✓ Showing":"📋 Export"}</button>
+            <button onClick={()=>{setShowRestore(s=>!s);setShowExport(false);}} style={{padding:"12px 18px",background:showRestore?C.surface:"transparent",border:`1.5px solid ${C.border}`,borderRadius:8,color:C.textDim,fontWeight:700,fontSize:15,cursor:"pointer",fontFamily:"'Courier New',monospace",whiteSpace:"nowrap"}}>{showRestore?"▲ Cancel":"↩ Restore"}</button>
           </div>
           {showExport&&<div style={{marginTop:12}}><p style={{margin:"0 0 6px",color:C.green,fontSize:13,fontWeight:700}}>✓ {items.length} items — select all and copy:</p><textarea readOnly value={exportText} onFocus={e=>e.target.select()} style={{...inp,height:120,resize:"vertical",fontSize:12,color:C.textDim}}/></div>}
           {restoreMsg.text&&<p style={{margin:"8px 0 0",color:restoreMsg.ok?C.green:"#f87171",fontSize:13}}>{restoreMsg.text}</p>}
@@ -358,11 +358,11 @@ function InventoryTab({items,filterType,setFilterType,sortBy,setSortBy,deleteIte
         {/* Filter / sort */}
         <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
           {["All","Weapon","Accessory","Exclusive"].map(t=>(
-            <button key={t} onClick={()=>setFilterType(t)} style={{padding:"10px 16px",background:filterType===t?"#1a1200":"transparent",border:`1.5px solid ${filterType===t?C.gold:C.border}`,color:filterType===t?C.gold:C.textDim,borderRadius:8,cursor:"pointer",fontSize:14,fontFamily:"'Courier New',monospace"}}>
+            <button key={t} onClick={()=>setFilterType(t)} style={{padding:"12px 18px",background:filterType===t?"#1a1200":"transparent",border:`1.5px solid ${filterType===t?C.gold:C.border}`,color:filterType===t?C.gold:C.textDim,borderRadius:8,cursor:"pointer",fontSize:15,fontFamily:"'Courier New',monospace"}}>
               {t}{t!=="All"?` (${counts[t]})`:` (${items.length})`}
             </button>
           ))}
-          <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{...sel,width:"auto",padding:"10px 14px",fontSize:14,marginLeft:"auto"}}>
+          <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{...sel,width:"auto",padding:"12px 14px",marginLeft:"auto"}}>
             <option value="rating">Rating ↓</option>
             <option value="score">Score ↓</option>
           </select>
@@ -373,9 +373,9 @@ function InventoryTab({items,filterType,setFilterType,sortBy,setSortBy,deleteIte
       <div style={{flex:1,overflowY:"auto",minHeight:0}}>
         {items.length===0?(
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",color:C.textDim,textAlign:"center",padding:"0 20px"}}>
-            <div style={{fontSize:52,marginBottom:18}}>⚡</div>
-            <p style={{margin:"0 0 8px",fontSize:20,fontWeight:700,color:C.text}}>No gear yet</p>
-            <p style={{margin:0,fontSize:15}}>Head to the ADD tab to scan or import your gear cards.</p>
+            <div style={{fontSize:64,marginBottom:18}}>⚡</div>
+            <p style={{margin:"0 0 8px",fontSize:22,fontWeight:700,color:C.text}}>No gear yet</p>
+            <p style={{margin:0,fontSize:16}}>Head to the ADD tab to scan or import your gear cards.</p>
           </div>
         ):items.map(item=><GearCard key={item.id} item={item} onDelete={deleteItem}/>)}
       </div>
@@ -398,8 +398,8 @@ function OptimizeTab({result,runOptimize,counts}) {
         <div style={{display:"flex",gap:10}}>
           {["Weapon","Accessory","Exclusive"].map(t=>(
             <div key={t} style={{flex:1,padding:"16px 10px",background:counts[t]>0?typeColors[t].bg:C.surface,border:`1px solid ${counts[t]>0?typeColors[t].border:C.border}`,borderRadius:12,textAlign:"center"}}>
-              <div style={{fontSize:30,fontWeight:700,color:counts[t]>0?typeColors[t].text:C.textDim}}>{counts[t]}</div>
-              <div style={{fontSize:11,color:C.textDim,letterSpacing:1,marginTop:2}}>{t.toUpperCase()}</div>
+              <div style={{fontSize:34,fontWeight:700,color:counts[t]>0?typeColors[t].text:C.textDim}}>{counts[t]}</div>
+              <div style={{fontSize:13,color:C.textDim,letterSpacing:1,marginTop:2}}>{t.toUpperCase()}</div>
             </div>
           ))}
         </div>
@@ -407,21 +407,21 @@ function OptimizeTab({result,runOptimize,counts}) {
         {/* Build info toggle */}
         <div style={{background:C.surface,border:`1px solid #2a1a3a`,borderRadius:12,overflow:"hidden"}}>
           <button onClick={()=>setShowBuildInfo(s=>!s)} style={{width:"100%",padding:"16px 18px",background:"transparent",border:"none",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
-            <span style={{color:C.gold,fontSize:15,fontWeight:700,letterSpacing:1}}>ℹ PRECISION BUILD INFO</span>
+            <span style={{color:C.gold,fontSize:17,fontWeight:700,letterSpacing:1}}>ℹ PRECISION BUILD INFO</span>
             <span style={{color:C.textDim,fontSize:18}}>{showBuildInfo?"▲":"▼"}</span>
           </button>
           {showBuildInfo&&(
             <div style={{padding:"0 18px 18px",display:"flex",gap:24,flexWrap:"wrap"}}>
               <div>
-                <p style={{color:C.textDim,margin:"0 0 10px",fontSize:12,letterSpacing:1.5}}>THRESHOLDS</p>
+                <p style={{color:C.textDim,margin:"0 0 10px",fontSize:14,letterSpacing:1.5}}>THRESHOLDS</p>
                 {[["HSS",reqs.hss,"%"],["Rune Onslaught",reqs.roe,"%"],["HVF",reqs.hvf,"%"],["Rolling Thunder",reqs.rte,"%"],["Lightning Domain",reqs.lde,"m"]].map(([label,val,unit])=>(
-                  <div key={label} style={{fontSize:14,color:C.purpleLight,marginBottom:6}}>⚡ {label} ≥ {val}{unit}</div>
+                  <div key={label} style={{fontSize:15,color:C.purpleLight,marginBottom:6}}>⚡ {label} ≥ {val}{unit}</div>
                 ))}
               </div>
               <div>
-                <p style={{color:C.textDim,margin:"0 0 10px",fontSize:12,letterSpacing:1.5}}>PRIORITY STATS</p>
+                <p style={{color:C.textDim,margin:"0 0 10px",fontSize:14,letterSpacing:1.5}}>PRIORITY STATS</p>
                 {Object.entries(STAT_W).filter(([,v])=>v>=4).sort((a,b)=>b[1]-a[1]).map(([k,v])=>(
-                  <div key={k} style={{fontSize:14,marginBottom:6,color:C.text}}>{k} <span style={{color:C.gold}}>×{v}</span></div>
+                  <div key={k} style={{fontSize:15,marginBottom:6,color:C.text}}>{k} <span style={{color:C.gold}}>×{v}</span></div>
                 ))}
               </div>
             </div>
@@ -429,7 +429,7 @@ function OptimizeTab({result,runOptimize,counts}) {
         </div>
 
         {/* Optimize button */}
-        <button onClick={runOptimize} disabled={!hasAll} style={{width:"100%",padding:"20px 0",background:hasAll?"#130f00":"#0a0a0a",border:`2px solid ${hasAll?C.gold:C.border}`,borderRadius:12,color:hasAll?C.gold:C.textDim,fontWeight:700,fontSize:17,letterSpacing:2.5,cursor:hasAll?"pointer":"not-allowed",fontFamily:"'Courier New',monospace"}}>
+        <button onClick={runOptimize} disabled={!hasAll} style={{width:"100%",padding:"24px 0",background:hasAll?"#130f00":"#0a0a0a",border:`2px solid ${hasAll?C.gold:C.border}`,borderRadius:12,color:hasAll?C.gold:C.textDim,fontWeight:700,fontSize:19,letterSpacing:2.5,cursor:hasAll?"pointer":"not-allowed",fontFamily:"'Courier New',monospace"}}>
           {hasAll?"⚡ FIND OPTIMAL BUILD":"Add gear to all 3 slots first"}
         </button>
       </div>
@@ -438,22 +438,22 @@ function OptimizeTab({result,runOptimize,counts}) {
       <div style={{flex:1,overflowY:"auto",minHeight:0}}>
         {!result?(
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",color:C.textDim,textAlign:"center",padding:"0 20px"}}>
-            <div style={{fontSize:52,marginBottom:18}}>⚡</div>
-            <p style={{margin:"0 0 8px",fontSize:18,fontWeight:700,color:hasAll?C.text:C.textDim}}>{hasAll?"Tap the button above to find your optimal build":"Add gear to all 3 slots, then optimize"}</p>
+            <div style={{fontSize:64,marginBottom:18}}>⚡</div>
+            <p style={{margin:"0 0 8px",fontSize:19,fontWeight:700,color:hasAll?C.text:C.textDim}}>{hasAll?"Tap the button above to find your optimal build":"Add gear to all 3 slots, then optimize"}</p>
           </div>
         ):(
           <div style={{display:"flex",flexDirection:"column",gap:12,paddingBottom:8}}>
             <div style={{padding:"14px 18px",borderRadius:12,background:result.full?C.greenDim:"#2e1a00",border:`1px solid ${result.full?"#2a6a2a":"#6a3a00"}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
               <div>
-                <span style={{color:result.full?C.green:C.orange,fontWeight:700,fontSize:17,display:"block"}}>{result.full?"✓ OPTIMAL BUILD":"⚠ BEST AVAILABLE"}</span>
-                <span style={{color:C.textDim,fontSize:14}}>Score: {result.score}</span>
+                <span style={{color:result.full?C.green:C.orange,fontWeight:700,fontSize:19,display:"block"}}>{result.full?"✓ OPTIMAL BUILD":"⚠ BEST AVAILABLE"}</span>
+                <span style={{color:C.textDim,fontSize:15}}>Score: {result.score}</span>
               </div>
             </div>
             <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px"}}>
-              <p style={{color:C.textDim,margin:"0 0 12px",fontSize:12,letterSpacing:1.5}}>THRESHOLD CHECK</p>
+              <p style={{color:C.textDim,margin:"0 0 12px",fontSize:13,letterSpacing:1.5}}>THRESHOLD CHECK</p>
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 {result.reqResult.checks.map(ch=>(
-                  <div key={ch.key} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:14}}>
+                  <div key={ch.key} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:15}}>
                     <span style={{color:ch.pass?C.green:"#f87171"}}>{ch.pass?"✓":"✗"} {ch.label}</span>
                     <span style={{color:ch.pass?C.green:C.orange}}>
                       {Math.round(ch.actual*10)/10}{ch.unit} / {ch.min}{ch.unit}
@@ -463,7 +463,7 @@ function OptimizeTab({result,runOptimize,counts}) {
                 ))}
               </div>
             </div>
-            <p style={{color:C.textDim,fontSize:12,letterSpacing:1.5,margin:"4px 0 0"}}>RECOMMENDED LOADOUT</p>
+            <p style={{color:C.textDim,fontSize:13,letterSpacing:1.5,margin:"4px 0 0"}}>RECOMMENDED LOADOUT</p>
             {[result.weapon,result.accessory,result.exclusive].map(p=><GearCard key={p.id} item={{...p,_score:scoreItem(p)}} highlight/>)}
           </div>
         )}
@@ -517,14 +517,14 @@ function SettingsPanel({onClose,itemCount}) {
         <div style={{padding:"14px 20px 0",textAlign:"center"}}>
           <div style={{width:44,height:5,background:C.border,borderRadius:3,margin:"0 auto 18px"}}/>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:22}}>
-            <h2 style={{margin:0,color:C.gold,fontSize:18,letterSpacing:2}}>⚙ SETTINGS</h2>
-            <button onClick={onClose} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.textDim,borderRadius:8,padding:"8px 18px",cursor:"pointer",fontSize:14,fontFamily:"'Courier New',monospace"}}>Done</button>
+            <h2 style={{margin:0,color:C.gold,fontSize:20,letterSpacing:2}}>⚙ SETTINGS</h2>
+            <button onClick={onClose} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.textDim,borderRadius:8,padding:"12px 20px",cursor:"pointer",fontSize:16,fontFamily:"'Courier New',monospace"}}>Done</button>
           </div>
         </div>
         <div style={{padding:"0 16px",display:"flex",flexDirection:"column",gap:14}}>
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px"}}>
-            <h3 style={{color:C.gold,margin:"0 0 8px",fontSize:15,letterSpacing:1.5}}>ANTHROPIC API KEY</h3>
-            <p style={{color:C.textDim,fontSize:13,margin:"0 0 14px",lineHeight:1.7}}>Required for 📷 Scan Photos. Get yours at console.anthropic.com → API Keys.</p>
+            <h3 style={{color:C.gold,margin:"0 0 8px",fontSize:17,letterSpacing:1.5}}>ANTHROPIC API KEY</h3>
+            <p style={{color:C.textDim,fontSize:15,margin:"0 0 14px",lineHeight:1.7}}>Required for 📷 Scan Photos. Get yours at console.anthropic.com → API Keys.</p>
             <div style={{display:"flex",gap:10}}>
               <input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="sk-ant-..." style={{...inp,flex:1,fontSize:15,padding:"13px 14px"}}/>
               <button onClick={saveApiKey} style={{padding:"13px 18px",background:apiSaved?C.greenDim:"#130f00",border:`1.5px solid ${apiSaved?C.green:C.gold}`,borderRadius:10,color:apiSaved?C.green:C.gold,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace",whiteSpace:"nowrap"}}>{apiSaved?"✓":"Save"}</button>
@@ -532,14 +532,14 @@ function SettingsPanel({onClose,itemCount}) {
             {apiKey&&<p style={{margin:"10px 0 0",fontSize:13,color:C.green}}>✓ API key configured</p>}
           </div>
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px"}}>
-            <h3 style={{color:C.gold,margin:"0 0 8px",fontSize:15,letterSpacing:1.5}}>CLOUD STORAGE (JSONBIN)</h3>
-            <p style={{color:C.textDim,fontSize:13,margin:"0 0 14px",lineHeight:1.7}}>Paste your JSONBin Master Key, then tap Setup.</p>
-            <label style={{...lbl,fontSize:12,marginBottom:8}}>JSONBin Master Key</label>
+            <h3 style={{color:C.gold,margin:"0 0 8px",fontSize:17,letterSpacing:1.5}}>CLOUD STORAGE (JSONBIN)</h3>
+            <p style={{color:C.textDim,fontSize:15,margin:"0 0 14px",lineHeight:1.7}}>Paste your JSONBin Master Key, then tap Setup.</p>
+            <label style={{...lbl,fontSize:14,marginBottom:8}}>JSONBin Master Key</label>
             <div style={{display:"flex",gap:10,marginBottom:14}}>
               <input type="password" value={binKey} onChange={e=>setBinKey(e.target.value)} placeholder="$2a$10$..." style={{...inp,flex:1,fontSize:15,padding:"13px 14px"}}/>
               <button onClick={saveBinKey} style={{padding:"13px 18px",background:binKeySaved?C.greenDim:"#130f00",border:`1.5px solid ${binKeySaved?C.green:"#7b68ee"}`,borderRadius:10,color:binKeySaved?C.green:"#a78bfa",fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace",whiteSpace:"nowrap"}}>{binKeySaved?"✓":"Save"}</button>
             </div>
-            <label style={{...lbl,fontSize:12,marginBottom:8}}>Active Bin ID</label>
+            <label style={{...lbl,fontSize:14,marginBottom:8}}>Active Bin ID</label>
             <div style={{display:"flex",gap:10,marginBottom:14}}>
               <input type="text" value={binId} onChange={e=>{const val=e.target.value.trim();setBinId(val);localStorage.setItem("bh:binId",val);}} placeholder="Enter Bin ID to link existing bin" style={{...inp,flex:1,fontSize:15,padding:"13px 14px"}}/>
             </div>
@@ -549,19 +549,19 @@ function SettingsPanel({onClose,itemCount}) {
                 <button onClick={()=>{localStorage.removeItem("bh:binId");setBinId("");}} style={{padding:"12px 18px",background:"transparent",border:`1.5px solid #3a1010`,borderRadius:10,color:"#884444",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>Disconnect</button>
               </div>
             ):(
-              <button onClick={setupCloud} disabled={cloudLoading||!binKey.trim()} style={{width:"100%",padding:"14px 0",background:cloudLoading||!binKey.trim()?"#111":"#0d0d2e",border:`1.5px solid ${cloudLoading||!binKey.trim()?"#333":"#7b68ee"}`,borderRadius:10,color:cloudLoading||!binKey.trim()?"#555":"#a78bfa",fontWeight:700,fontSize:15,cursor:cloudLoading||!binKey.trim()?"not-allowed":"pointer",fontFamily:"'Courier New',monospace"}}>
+              <button onClick={setupCloud} disabled={cloudLoading||!binKey.trim()} style={{width:"100%",padding:"16px 0",background:cloudLoading||!binKey.trim()?"#111":"#0d0d2e",border:`1.5px solid ${cloudLoading||!binKey.trim()?"#333":"#7b68ee"}`,borderRadius:10,color:cloudLoading||!binKey.trim()?"#555":"#a78bfa",fontWeight:700,fontSize:16,cursor:cloudLoading||!binKey.trim()?"not-allowed":"pointer",fontFamily:"'Courier New',monospace"}}>
                 {cloudLoading?"⏳ Setting up…":"☁ Setup Cloud Storage"}
               </button>
             )}
             {cloudMsg&&<p style={{margin:"12px 0 0",fontSize:13,color:cloudMsg.startsWith("✓")?C.green:"#f87171"}}>{cloudMsg}</p>}
           </div>
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px"}}>
-            <h3 style={{color:C.gold,margin:"0 0 8px",fontSize:15,letterSpacing:1.5}}>BUILD REQUIREMENTS</h3>
-            <p style={{color:C.textDim,fontSize:13,margin:"0 0 16px",lineHeight:1.7}}>Minimum combined enhancement values across all 3 slots.</p>
+            <h3 style={{color:C.gold,margin:"0 0 8px",fontSize:17,letterSpacing:1.5}}>BUILD REQUIREMENTS</h3>
+            <p style={{color:C.textDim,fontSize:15,margin:"0 0 16px",lineHeight:1.7}}>Minimum combined enhancement values across all 3 slots.</p>
             <div style={{display:"flex",flexDirection:"column",gap:14,marginBottom:16}}>
               {reqFields.map(({key,label,unit})=>(
                 <div key={key} style={{display:"flex",alignItems:"center",gap:10}}>
-                  <label style={{...lbl,marginBottom:0,flex:1,fontSize:13}}>{label}</label>
+                  <label style={{...lbl,marginBottom:0,flex:1,fontSize:14}}>{label}</label>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <input type="number" value={reqs[key]} onChange={e=>updateReq(key,e.target.value)} style={{...inp,width:95,textAlign:"right",padding:"11px 12px",fontSize:15}}/>
                     <span style={{color:C.textDim,fontSize:14,minWidth:18}}>{unit}</span>
@@ -569,13 +569,13 @@ function SettingsPanel({onClose,itemCount}) {
                 </div>
               ))}
             </div>
-            <button onClick={saveReqs} style={{width:"100%",padding:"14px 0",background:reqsSaved?C.greenDim:"#130f00",border:`1.5px solid ${reqsSaved?C.green:C.gold}`,borderRadius:10,color:reqsSaved?C.green:C.gold,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>
+            <button onClick={saveReqs} style={{width:"100%",padding:"16px 0",background:reqsSaved?C.greenDim:"#130f00",border:`1.5px solid ${reqsSaved?C.green:C.gold}`,borderRadius:10,color:reqsSaved?C.green:C.gold,fontWeight:700,fontSize:16,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>
               {reqsSaved?"✓ Saved":"💾 Save Requirements"}
             </button>
           </div>
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px"}}>
-            <h3 style={{color:C.gold,margin:"0 0 10px",fontSize:15,letterSpacing:1.5}}>ABOUT</h3>
-            <p style={{color:C.textDim,fontSize:13,margin:0,lineHeight:1.8}}>Blood Hunt Gear Optimizer · Thor Rune Awakening · Precision Build<br/>{itemCount} items in inventory</p>
+            <h3 style={{color:C.gold,margin:"0 0 10px",fontSize:17,letterSpacing:1.5}}>ABOUT</h3>
+            <p style={{color:C.textDim,fontSize:15,margin:0,lineHeight:1.8}}>Blood Hunt Gear Optimizer · Thor Rune Awakening · Precision Build<br/>{itemCount} items in inventory</p>
           </div>
         </div>
       </div>
@@ -585,8 +585,8 @@ function SettingsPanel({onClose,itemCount}) {
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
-const HEADER_H = 58;
-const NAV_H = 62;
+const HEADER_H = 68;
+const NAV_H = 72;
 
 export default function App() {
   const [tab,setTab] = useState("add");
@@ -649,10 +649,10 @@ export default function App() {
       {/* Header — fixed height */}
       <div style={{height:HEADER_H,flexShrink:0,background:"#07070e",borderBottom:`2px solid ${C.red}`,padding:"0 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div>
-          <h1 style={{margin:0,fontSize:17,fontWeight:900,color:C.gold,letterSpacing:2,lineHeight:1.2}}>BLOOD HUNT ⚡ GEAR OPTIMIZER</h1>
-          <p style={{margin:0,fontSize:11,color:C.textDim,letterSpacing:1}}>Thor · Rune Awakening · Precision Build</p>
+          <h1 style={{margin:0,fontSize:20,fontWeight:900,color:C.gold,letterSpacing:1.5,lineHeight:1.2}}>BLOOD HUNT ⚡ GEAR OPTIMIZER</h1>
+          <p style={{margin:0,fontSize:13,color:C.textDim,letterSpacing:1}}>Thor · Rune Awakening · Precision Build</p>
         </div>
-        <button onClick={()=>setShowSettings(true)} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.textDim,borderRadius:10,padding:"10px 14px",cursor:"pointer",fontSize:20,lineHeight:1,flexShrink:0}}>⚙</button>
+        <button onClick={()=>setShowSettings(true)} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.textDim,borderRadius:10,padding:"12px 16px",cursor:"pointer",fontSize:22,lineHeight:1,flexShrink:0}}>⚙</button>
       </div>
 
       {/* Content — fills all space between header and nav */}
@@ -665,9 +665,9 @@ export default function App() {
       {/* Bottom nav — fixed height */}
       <div style={{height:NAV_H,flexShrink:0,background:"#07070e",borderTop:`2px solid ${C.border}`,display:"flex",paddingBottom:"env(safe-area-inset-bottom)"}}>
         {[["add","➕","ADD"],["inventory","📦","INVENTORY"],["optimize","⚡","OPTIMIZE"]].map(([id,icon,label])=>(
-          <button key={id} onClick={()=>setTab(id)} style={{flex:1,background:"transparent",border:"none",borderTop:`3px solid ${tab===id?C.gold:"transparent"}`,color:tab===id?C.gold:C.textDim,fontFamily:"'Courier New',monospace",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3}}>
-            <span style={{fontSize:22}}>{icon}</span>
-            <span style={{fontSize:10,letterSpacing:1}}>{label}</span>
+          <button key={id} onClick={()=>setTab(id)} style={{flex:1,background:"transparent",border:"none",borderTop:`3px solid ${tab===id?C.gold:"transparent"}`,color:tab===id?C.gold:C.textDim,fontFamily:"'Courier New',monospace",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}>
+            <span style={{fontSize:26}}>{icon}</span>
+            <span style={{fontSize:12,letterSpacing:1}}>{label}</span>
           </button>
         ))}
       </div>
