@@ -116,8 +116,6 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items}) {
   };
 
   const scanAll = async () => {
-    const apiKey=localStorage.getItem("bh:apiKey");
-    if (!apiKey){setMsg({text:"⚠ Add your Anthropic API key in Settings first.",ok:false});return;}
     const pending=photos.filter(p=>p.status==="pending");
     if (!pending.length) return;
     setScanning(true); setMsg({text:"",ok:true});
@@ -125,7 +123,7 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items}) {
       setPhotos(prev=>prev.map(p=>p.id===photo.id?{...p,status:"scanning"}:p));
       try {
         const b64=await fileToBase64(photo.file);
-        const result=await scanGearCard(b64,photo.file.type||"image/jpeg",apiKey);
+        const result=await scanGearCard(b64,photo.file.type||"image/jpeg");
         setPhotos(prev=>prev.map(p=>p.id===photo.id?{...p,status:"done",result}:p));
       } catch(err) {
         setPhotos(prev=>prev.map(p=>p.id===photo.id?{...p,status:"error",error:err.message}:p));
@@ -398,7 +396,6 @@ function InventoryTab({items,filterType,setFilterType,sortBy,setSortBy,deleteIte
 }
 
 // ── Optimize Tab ──────────────────────────────────────────────────────────────
-
 function OptimizeTab({result,runOptimize,counts}) {
   const hasAll=counts.Weapon>0&&counts.Accessory>0&&counts.Exclusive>0;
   const reqs=getReqs();
@@ -471,7 +468,6 @@ function OptimizeTab({result,runOptimize,counts}) {
 }
 
 // ── Settings Panel (slide-up modal) ───────────────────────────────────────────
-
 function SettingsPanel({onClose,itemCount}) {
   const [apiKey,setApiKey] = useState(()=>localStorage.getItem("bh:apiKey")||"");
   const [binKey,setBinKey] = useState(()=>process.env.REACT_APP_BIN_KEY || localStorage.getItem("bh:binKey")||"");
@@ -606,7 +602,6 @@ function SettingsPanel({onClose,itemCount}) {
 }
 
 // ── App ───────────────────────────────────────────────────────────────────────
-
 export default function App() {
   const [tab,setTab] = useState("add");
   const [items,setItems] = useState([]);
