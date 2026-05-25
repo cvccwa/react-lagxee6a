@@ -1,3 +1,4 @@
+import './style.css';
 import { useState, useEffect, useRef } from "react";
 import {
   ENHANCEMENTS, BASE_ATTRS, MANDATORY_ENH, GRADES, GRADE_COLOR,
@@ -326,29 +327,29 @@ function InventoryTab({items,filterType,setFilterType,sortBy,setSortBy,deleteIte
   };
 
   return (
-    <div style={{display:"flex",flexDirection:"column",height:"100%",gap:12,minHeight:0}}>
+    <div style={{display:"flex",flexDirection:"column",height:"100%",gap:8,minHeight:0}}>
       {/* Cloud + backup — fixed */}
-      <div style={{flexShrink:0,display:"flex",flexDirection:"column",gap:10}}>
-        <div style={{background:"#0d0d1f",border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px"}}>
-          <p style={{margin:"0 0 10px",color:C.gold,fontSize:16,fontWeight:700,letterSpacing:1}}>
+      <div style={{flexShrink:0,display:"flex",flexDirection:"column",gap:8}}>
+        <div style={{background:"#0d0d1f",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 14px"}}>
+          <p style={{margin:"0 0 6px",color:C.gold,fontSize:14,fontWeight:700,letterSpacing:1}}>
             ☁ CLOUD {getBinId()?<span style={{color:C.green,fontWeight:400}}>(connected)</span>:<span style={{color:"#f87171",fontWeight:400}}>(open Settings to connect)</span>}
           </p>
           <div style={{display:"flex",gap:10}}>
-            <button onClick={loadFromCloud} disabled={!!cloudLoading} style={{flex:1,padding:"18px 0",background:cloudLoading==="load"?"#111":"#0d0d2e",border:`1.5px solid ${cloudLoading?"#333":"#7b68ee"}`,borderRadius:10,color:cloudLoading?"#555":"#a78bfa",fontWeight:700,fontSize:17,cursor:cloudLoading?"wait":"pointer",fontFamily:"'Courier New',monospace"}}>
+            <button onClick={loadFromCloud} disabled={!!cloudLoading} style={{flex:1,padding:"11px 0",background:cloudLoading==="load"?"#111":"#0d0d2e",border:`1.5px solid ${cloudLoading?"#333":"#7b68ee"}`,borderRadius:10,color:cloudLoading?"#555":"#a78bfa",fontWeight:700,fontSize:15,cursor:cloudLoading?"wait":"pointer",fontFamily:"'Courier New',monospace"}}>
               {cloudLoading==="load"?"⏳ Loading…":"☁ Load"}
             </button>
-            <button onClick={saveToCloud} disabled={!!cloudLoading||items.length===0} style={{flex:1,padding:"18px 0",background:cloudLoading==="save"?"#111":"#0d1a0a",border:`1.5px solid ${cloudLoading||items.length===0?"#333":C.green}`,borderRadius:10,color:cloudLoading||items.length===0?"#555":C.green,fontWeight:700,fontSize:17,cursor:cloudLoading||items.length===0?"not-allowed":"pointer",fontFamily:"'Courier New',monospace"}}>
+            <button onClick={saveToCloud} disabled={!!cloudLoading||items.length===0} style={{flex:1,padding:"11px 0",background:cloudLoading==="save"?"#111":"#0d1a0a",border:`1.5px solid ${cloudLoading||items.length===0?"#333":C.green}`,borderRadius:10,color:cloudLoading||items.length===0?"#555":C.green,fontWeight:700,fontSize:15,cursor:cloudLoading||items.length===0?"not-allowed":"pointer",fontFamily:"'Courier New',monospace"}}>
               {cloudLoading==="save"?"⏳ Saving…":"💾 Save"}
             </button>
           </div>
-          {cloudMsg&&<p style={{margin:"10px 0 0",fontSize:15,color:cloudMsg.startsWith("✓")?C.green:"#f87171"}}>{cloudMsg}</p>}
+          {cloudMsg&&<p style={{margin:"8px 0 0",fontSize:14,color:cloudMsg.startsWith("✓")?C.green:"#f87171"}}>{cloudMsg}</p>}
         </div>
 
-        <div style={{background:"#0d0d1f",border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 16px"}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <div style={{background:"#0d0d1f",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 14px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
             <p style={{margin:0,color:C.textDim,fontSize:13,fontWeight:700,letterSpacing:1,flex:1}}>LOCAL BACKUP</p>
-            <button onClick={handleExport} disabled={items.length===0} style={{padding:"12px 18px",background:showExport?"#0d2e15":"#130f00",border:`1.5px solid ${showExport?C.green:C.gold}`,borderRadius:8,color:showExport?C.green:C.gold,fontWeight:700,fontSize:15,cursor:items.length===0?"not-allowed":"pointer",fontFamily:"'Courier New',monospace",whiteSpace:"nowrap"}}>{showExport?"✓ Showing":"📋 Export"}</button>
-            <button onClick={()=>{setShowRestore(s=>!s);setShowExport(false);}} style={{padding:"12px 18px",background:showRestore?C.surface:"transparent",border:`1.5px solid ${C.border}`,borderRadius:8,color:C.textDim,fontWeight:700,fontSize:15,cursor:"pointer",fontFamily:"'Courier New',monospace",whiteSpace:"nowrap"}}>{showRestore?"▲ Cancel":"↩ Restore"}</button>
+            <button onClick={handleExport} disabled={items.length===0} style={{padding:"9px 12px",background:showExport?"#0d2e15":"#130f00",border:`1.5px solid ${showExport?C.green:C.gold}`,borderRadius:8,color:showExport?C.green:C.gold,fontWeight:700,fontSize:14,cursor:items.length===0?"not-allowed":"pointer",fontFamily:"'Courier New',monospace",whiteSpace:"nowrap"}}>{showExport?"✓ Showing":"📋 Export"}</button>
+            <button onClick={()=>{setShowRestore(s=>!s);setShowExport(false);}} style={{padding:"9px 12px",background:showRestore?C.surface:"transparent",border:`1.5px solid ${C.border}`,borderRadius:8,color:C.textDim,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace",whiteSpace:"nowrap"}}>{showRestore?"▲ Cancel":"↩ Restore"}</button>
           </div>
           {showExport&&<div style={{marginTop:12}}><p style={{margin:"0 0 6px",color:C.green,fontSize:13,fontWeight:700}}>✓ {items.length} items — select all and copy:</p><textarea readOnly value={exportText} onFocus={e=>e.target.select()} style={{...inp,height:120,resize:"vertical",fontSize:12,color:C.textDim}}/></div>}
           {restoreMsg.text&&<p style={{margin:"8px 0 0",color:restoreMsg.ok?C.green:"#f87171",fontSize:13}}>{restoreMsg.text}</p>}
@@ -356,13 +357,13 @@ function InventoryTab({items,filterType,setFilterType,sortBy,setSortBy,deleteIte
         </div>
 
         {/* Filter / sort */}
-        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+        <div style={{display:"flex",gap:6,flexWrap:"nowrap",overflowX:"auto",alignItems:"center"}}>
           {["All","Weapon","Accessory","Exclusive"].map(t=>(
-            <button key={t} onClick={()=>setFilterType(t)} style={{padding:"12px 18px",background:filterType===t?"#1a1200":"transparent",border:`1.5px solid ${filterType===t?C.gold:C.border}`,color:filterType===t?C.gold:C.textDim,borderRadius:8,cursor:"pointer",fontSize:15,fontFamily:"'Courier New',monospace"}}>
+            <button key={t} onClick={()=>setFilterType(t)} style={{padding:"8px 10px",background:filterType===t?"#1a1200":"transparent",border:`1.5px solid ${filterType===t?C.gold:C.border}`,color:filterType===t?C.gold:C.textDim,borderRadius:8,cursor:"pointer",fontSize:13,fontFamily:"'Courier New',monospace",whiteSpace:"nowrap",flexShrink:0}}>
               {t}{t!=="All"?` (${counts[t]})`:` (${items.length})`}
             </button>
           ))}
-          <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{...sel,width:"auto",padding:"12px 14px",marginLeft:"auto"}}>
+          <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{...sel,width:"auto",padding:"8px 10px",marginLeft:"auto",flexShrink:0}}>
             <option value="rating">Rating ↓</option>
             <option value="score">Score ↓</option>
           </select>
@@ -648,11 +649,11 @@ export default function App() {
 
       {/* Header — fixed height */}
       <div style={{height:HEADER_H,flexShrink:0,background:"#07070e",borderBottom:`2px solid ${C.red}`,padding:"0 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <div>
-          <h1 style={{margin:0,fontSize:20,fontWeight:900,color:C.gold,letterSpacing:1.5,lineHeight:1.2}}>BLOOD HUNT ⚡ GEAR OPTIMIZER</h1>
-          <p style={{margin:0,fontSize:13,color:C.textDim,letterSpacing:1}}>Thor · Rune Awakening · Precision Build</p>
+        <div style={{minWidth:0,flex:1}}>
+          <h1 style={{margin:0,fontSize:15,fontWeight:900,color:C.gold,letterSpacing:0.5,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>BLOOD HUNT ⚡ GEAR OPTIMIZER</h1>
+          <p style={{margin:0,fontSize:11,color:C.textDim,letterSpacing:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Thor · Rune Awakening · Precision Build</p>
         </div>
-        <button onClick={()=>setShowSettings(true)} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.textDim,borderRadius:10,padding:"12px 16px",cursor:"pointer",fontSize:22,lineHeight:1,flexShrink:0}}>⚙</button>
+        <button onClick={()=>setShowSettings(true)} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.textDim,borderRadius:10,padding:"10px 12px",cursor:"pointer",fontSize:22,lineHeight:1,flexShrink:0}}>⚙</button>
       </div>
 
       {/* Content — fills all space between header and nav */}
