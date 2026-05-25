@@ -3,3 +3,38 @@ p {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
     Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
 }
+
+/* ── Mobile baseline resets ──────────────────────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overscroll-behavior: none;
+}
+
+body {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+button, a, label, select, input, textarea {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}

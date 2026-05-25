@@ -82,17 +82,17 @@ export const typeColors = {
 
 // Shared input styles
 export const inp = {
-  width:"100%", padding:"8px 10px", background:"#09090f",
+  width:"100%", padding:"10px 12px", background:"#09090f",
   border:"1px solid #1e1e35", borderRadius:5, color:"#d8d0ec",
-  fontSize:13, boxSizing:"border-box", outline:"none",
+  fontSize:16, boxSizing:"border-box", outline:"none",
   fontFamily:"'Courier New',monospace"
 };
 export const sel = {
-  padding:"8px 10px", background:"#09090f", border:"1px solid #1e1e35",
-  borderRadius:5, color:"#d8d0ec", fontSize:12, width:"100%",
+  padding:"10px 12px", background:"#09090f", border:"1px solid #1e1e35",
+  borderRadius:5, color:"#d8d0ec", fontSize:16, width:"100%",
   boxSizing:"border-box", outline:"none", fontFamily:"'Courier New',monospace"
 };
 export const lbl = {
-  display:"block", fontSize:10, color:"#7a7090",
-  letterSpacing:1.5, marginBottom:5, textTransform:"uppercase"
+  display:"block", fontSize:13, color:"#7a7090",
+  letterSpacing:1, marginBottom:6, textTransform:"uppercase"
 };
