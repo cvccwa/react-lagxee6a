@@ -632,8 +632,7 @@ export default function App() {
   const runOptimize = () => setOptimResult(optimize(
     items.filter(i=>i.type==="Weapon"),
     items.filter(i=>i.type==="Accessory"),
-    items.filter(i=>i.type==="Exclusive"),
-    items
+    items.filter(i=>i.type==="Exclusive")
   ));
 
   const counts={Weapon:items.filter(i=>i.type==="Weapon").length,Accessory:items.filter(i=>i.type==="Accessory").length,Exclusive:items.filter(i=>i.type==="Exclusive").length};
