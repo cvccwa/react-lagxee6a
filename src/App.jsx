@@ -282,7 +282,7 @@ function InventoryTab({items,filterType,setFilterType,sortBy,setSortBy,deleteIte
   const [cloudMsg,setCloudMsg] = useState("");
   const [cloudLoading,setCloudLoading] = useState("");
 
-  const getBinId = () => localStorage.getItem("bh:binId");
+  const getBinId = () => process.env.REACT_APP_BIN_ID || localStorage.getItem("bh:binId");
 
   const handleExport = () => {
     const clean=items.map(({_score,...rest})=>rest);
