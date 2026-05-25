@@ -35,9 +35,9 @@ export const GRADE_M = { D:1, C:2, B:3, A:4, S:5 };
 // Base attribute scoring weights (non-enhancement stats)
 export const STAT_W = {
   "Precision Rate":10, "Precision Damage":10, "Total Output Boost":9,
-  "Total Damage Bonus":8, "Bonus Damage vs Bosses":7,
-  "Bonus Damage vs Close-Range Enemies":5, "Damage Bonus vs Healthy Enemies":4,
-  "Health":1, "Percentage Health":1, "Armor":0.5,
+  "Total Damage Bonus":9, "Bonus Damage vs Bosses":8,
+  "Bonus Damage vs Close-Range Enemies":5, "Damage Bonus vs Healthy Enemies":1,
+  "Health":1, "Percentage Health":1, "Armor":1,
 };
 
 // Enhancement weights — used in pair interaction scoring
@@ -50,8 +50,8 @@ export const ENH_W = {
   "High-Voltage Field Enhancement":9,
   "Rolling Thunder Enhancement":8,
   "Lightning Domain Enhancement":7,
-  "Immortal Rune Enhancement":4,
-  "Ultimate Storm Enhancement":3,
+  "Immortal Rune Enhancement":1,
+  "Ultimate Storm Enhancement":1,
 };
 
 // Pair interaction base floor (0.4 = 40% value with no partner, scales to 100% at max partner)
