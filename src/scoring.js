@@ -1,129 +1,136 @@
 // ── scoring.js ────────────────────────────────────────────────────────────────
-// All scoring and optimization logic.
-// Change algorithms, pair interaction weights, and optimization strategy here.
+// Mechanically-grounded scoring based on empirical game data.
+// All constants derived from in-game measurement — no arbitrary weights.
+//
+// To update skill tree profile: edit the SKILL_* constants below.
+// To update base game values: edit the BASE_* constants below.
 
-import {
-  STAT_W, ENH_W, GRADE_M, MANDATORY_ENH, DEFAULT_REQS, PAIR_BASE
-} from "./config.js";
+import { STAT_W, ENH_W, GRADE_M, MANDATORY_ENH, DEFAULT_REQS } from "./config.js";
+
+// ── Base Game Constants ───────────────────────────────────────────────────────
+// Measured with zero gear AND zero skill points assigned.
+
+const BASE_MB_PROJ_DAMAGE = 130;  // Mjolnir Bash base projectile damage
+const BASE_ZAP_DAMAGE     = 32;   // Base lightning zap damage per tick
+const BASE_ATTACK_SPEED   = 2;    // Base Mjolnir Bash attacks per second
+
+// ── Skill Tree Constants (Profile 1) ─────────────────────────────────────────
+// Fixed contributions from your consistent skill tree assignment.
+// Update these if you reassign skill points.
+
+const SKILL_ATTACK_SPEED = 100;   // % attack speed bonus: Enchanted Flurry (60%) + general (40%)
+const SKILL_HSS          = 30;    // % HSS inherited from Mjolnir Bash attack speed
+const SKILL_HVF          = 150;   // % HVF from 3/3 High-Voltage Field trait
+const SKILL_LDE          = 4.5;   // m LDE from 3/3 Lightning Domain trait
+const SKILL_PR           = 6;     // % Precision Rate: 1% base + 5% skills
+const SKILL_PD           = 3350;  // % Precision Damage post ×2 multiplier: (800 base + 875 skill) × 2
+const SKILL_TOB          = 278;   // % Total Output Boost: 117% base + 161% skills
+
+// ── Gear Modifiers ────────────────────────────────────────────────────────────
+
+// Gear Precision Damage is doubled by the ×200% Precision Damage skill trait
+// because gear adds into the pool before the multiplier is applied.
+// Confirmed empirically: 3350 + (1629 × 2) = 6608 ✓
+const PD_GEAR_MULTIPLIER = 2;
+
+// Total Output Boost diminishing returns half-saturation constant.
+// At TOB = TOB_DR_K the marginal value is half of early investment.
+// Set to 500 based on observed "felt" diminishing returns around 500%.
+const TOB_DR_K = 500;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// Parse numeric value from enhancement string e.g. "+443%" → 443, "+7.12m" → 7.12
+// Parse numeric value from stat string: "+443%" → 443, "+7.12m" → 7.12
 export function parseEnhValue(val) {
   if (!val) return 0;
   const n = parseFloat(String(val).replace(/[^0-9.]/g, ""));
   return isNaN(n) ? 0 : n;
 }
 
-// Sum a specific enhancement across a set of items
-export function comboEnhTotal(items, enhName) {
+// Sum a named stat across all items in a combo
+export function comboEnhTotal(items, statName) {
   let total = 0;
   for (const item of items) {
     for (const e of item.extendedEffects || []) {
-      if (e.stat === enhName) total += parseEnhValue(e.value);
+      if (e.stat === statName) total += parseEnhValue(e.value);
     }
   }
   return total;
 }
 
-// Compute the max value of each key enhancement across the full inventory.
-// Used to normalize pair interaction scores so they're inventory-relative.
-export function computeMaxEnhValues(allItems) {
-  const maxes = { hss:1, roe:1, hvf:1, rte:1, lde:1 };
-  for (const item of allItems) {
-    for (const e of item.extendedEffects || []) {
-      const v = parseEnhValue(e.value);
-      if (e.stat === "High-Speed Shock Enhancement")    maxes.hss = Math.max(maxes.hss, v);
-      if (e.stat === "Rune Onslaught Enhancement")      maxes.roe = Math.max(maxes.roe, v);
-      if (e.stat === "High-Voltage Field Enhancement")  maxes.hvf = Math.max(maxes.hvf, v);
-      if (e.stat === "Rolling Thunder Enhancement")     maxes.rte = Math.max(maxes.rte, v);
-      if (e.stat === "Lightning Domain Enhancement")    maxes.lde = Math.max(maxes.lde, v);
-    }
-  }
-  return maxes;
-}
+// ── Display Score (inventory list only) ──────────────────────────────────────
+// Simplified single-item score for inventory sorting and display.
+// The true score requires a full 3-piece combo — see scoreCombo().
 
-// ── Item Scoring ──────────────────────────────────────────────────────────────
-
-// Score a single item's base attributes (non-enhancement stats + rating bonus).
-// Used for inventory display and pre-sorting before full combo evaluation.
-export function scoreItemBase(item) {
+export function scoreItem(item) {
   let s = (item.rating - 5500) / 200;
   for (const e of item.extendedEffects || []) {
     if (!e.stat || !e.grade) continue;
     const gm = GRADE_M[e.grade] || 1;
     if (STAT_W[e.stat] != null) s += STAT_W[e.stat] * gm;
+    if (ENH_W[e.stat]  != null) s += ENH_W[e.stat]  * gm;
   }
-  return s;
-}
-
-// Partial enhancement score for a single item (grade-based, ignores pair interaction).
-// Used for inventory list display only — not used in combo optimization.
-export function scoreItemEnhPartial(item) {
-  let s = 0;
-  for (const e of item.extendedEffects || []) {
-    if (!e.stat || !e.grade) continue;
-    const gm = GRADE_M[e.grade] || 1;
-    if (ENH_W[e.stat] != null) s += ENH_W[e.stat] * gm;
-  }
-  return s;
-}
-
-// Combined display score for inventory list (base + partial enhancements)
-export function scoreItem(item) {
-  return Math.round((scoreItemBase(item) + scoreItemEnhPartial(item)) * 10) / 10;
-}
-
-// ── Combo Scoring ─────────────────────────────────────────────────────────────
-
-// Score a full 3-piece combo using pair interaction logic.
-//
-// Pair mechanic:
-//   HSS x ROE = zap frequency path (Rune Onslaught boosts Mjolnir Bash speed → HSS scales off it)
-//   HVF x RTE = zap damage path (Rolling Thunder boosts Mjolnir Bash damage → HVF scales off it)
-//
-// Formula per enhancement:
-//   score = value * (PAIR_BASE + (1-PAIR_BASE) * partner_normalized) * weight / 100
-//
-// This means:
-//   - Enhancement with no partner scores at PAIR_BASE (40%) of max
-//   - Enhancement with max partner scores at 100%
-//   - Partner normalization is relative to the best single-item roll in inventory
-export function scoreCombo(w, a, e, maxEnhValues) {
-  const combo = [w, a, e];
-  const mx = maxEnhValues;
-
-  // Base attribute scores
-  let s = scoreItemBase(w) + scoreItemBase(a) + scoreItemBase(e);
-
-  // Zap frequency path: HSS × ROE
-  const hssTotal = comboEnhTotal(combo, "High-Speed Shock Enhancement");
-  const roeTotal = comboEnhTotal(combo, "Rune Onslaught Enhancement");
-  const hssScore = hssTotal * (PAIR_BASE + (1-PAIR_BASE)*(roeTotal/mx.roe)) * ENH_W["High-Speed Shock Enhancement"] / 100;
-  const roeScore = roeTotal * (PAIR_BASE + (1-PAIR_BASE)*(hssTotal/mx.hss)) * ENH_W["Rune Onslaught Enhancement"] / 100;
-
-  // Zap damage path: HVF × RTE
-  const hvfTotal = comboEnhTotal(combo, "High-Voltage Field Enhancement");
-  const rteTotal = comboEnhTotal(combo, "Rolling Thunder Enhancement");
-  const hvfScore = hvfTotal * (PAIR_BASE + (1-PAIR_BASE)*(rteTotal/mx.rte)) * ENH_W["High-Voltage Field Enhancement"] / 100;
-  const rteScore = rteTotal * (PAIR_BASE + (1-PAIR_BASE)*(hvfTotal/mx.hvf)) * ENH_W["Rolling Thunder Enhancement"] / 100;
-
-  // Lightning Domain: independent linear
-  const ldeTotal = comboEnhTotal(combo, "Lightning Domain Enhancement");
-  const ldeScore = ldeTotal * ENH_W["Lightning Domain Enhancement"];
-
-  // Independent enhancements: Immortal Rune, Ultimate Storm
-  for (const item of combo) {
-    for (const ef of item.extendedEffects || []) {
-      if (!ef.stat || !ef.grade) continue;
-      const gm = GRADE_M[ef.grade] || 1;
-      if (ef.stat === "Immortal Rune Enhancement")  s += ENH_W["Immortal Rune Enhancement"] * gm;
-      if (ef.stat === "Ultimate Storm Enhancement") s += ENH_W["Ultimate Storm Enhancement"] * gm;
-    }
-  }
-
-  s += hssScore + roeScore + hvfScore + rteScore + ldeScore;
   return Math.round(s * 10) / 10;
+}
+
+// ── Combo DPS Score ───────────────────────────────────────────────────────────
+//
+// Full mechanically-grounded DPS formula:
+//
+//   proj_damage  = 130 × (1 + RTE_gear/100)
+//                  ↑ Rolling Thunder gear boosts Mjolnir Bash projectile damage
+//
+//   zap_damage   = 32 × (1 + (150 + HVF_gear)/100)
+//                  ↑ HVF scales zap damage off Mjolnir Bash projectile damage
+//
+//   attack_speed = 2 × (1 + (100 + ROE_gear)/100)
+//                  ↑ ROE gear + skills boost Mjolnir Bash attack speed
+//
+//   zap_freq     = attack_speed × (30 + HSS_gear)/100
+//                  ↑ HSS inherits from attack speed to set zap trigger frequency
+//
+//   PR_total     = (6 + PR_gear) / 100
+//   PD_total     = (3350 + PD_gear × 2) / 100
+//                  ↑ PD_gear × 2 because gear adds before the ×200% skill multiplier
+//
+//   precision    = 1 + PR_total × (PD_total - 1)
+//                  ↑ precision hits replace normal hits; expected value formula
+//
+//   output       = (278 + TOB_gear) / (278 + TOB_gear + 500)
+//                  ↑ hyperbolic diminishing returns, half-saturation at 500%
+//
+//   area         = (4.5 + LDE_gear)²
+//                  ↑ lightning field is a circle; enemies hit ∝ πr²
+//
+//   DPS = proj_damage × zap_damage × zap_freq × precision × output × area
+
+export function scoreCombo(w, a, e) {
+  const combo = [w, a, e];
+
+  // Gear totals
+  const roe_gear = comboEnhTotal(combo, "Rune Onslaught Enhancement");
+  const hss_gear = comboEnhTotal(combo, "High-Speed Shock Enhancement");
+  const rte_gear = comboEnhTotal(combo, "Rolling Thunder Enhancement");
+  const hvf_gear = comboEnhTotal(combo, "High-Voltage Field Enhancement");
+  const lde_gear = comboEnhTotal(combo, "Lightning Domain Enhancement");
+  const pr_gear  = comboEnhTotal(combo, "Precision Rate");
+  const pd_gear  = comboEnhTotal(combo, "Precision Damage");
+  const tob_gear = comboEnhTotal(combo, "Total Output Boost");
+
+  // DPS formula brackets
+  const proj_damage  = BASE_MB_PROJ_DAMAGE * (1 + rte_gear / 100);
+  const zap_damage   = BASE_ZAP_DAMAGE * (1 + (SKILL_HVF + hvf_gear) / 100);
+  const attack_speed = BASE_ATTACK_SPEED * (1 + (SKILL_ATTACK_SPEED + roe_gear) / 100);
+  const zap_freq     = attack_speed * (SKILL_HSS + hss_gear) / 100;
+  const pr_total     = (SKILL_PR + pr_gear) / 100;
+  const pd_total     = (SKILL_PD + pd_gear * PD_GEAR_MULTIPLIER) / 100;
+  const precision    = 1 + pr_total * (pd_total - 1);
+  const tob_total    = SKILL_TOB + tob_gear;
+  const output       = tob_total / (tob_total + TOB_DR_K);
+  const area         = Math.pow(SKILL_LDE + lde_gear, 2);
+
+  const dps = proj_damage * zap_damage * zap_freq * precision * output * area;
+  return Math.round(dps * 100) / 100;
 }
 
 // ── Requirements Check ────────────────────────────────────────────────────────
@@ -143,10 +150,10 @@ export function checkReqs(w, a, e, reqs) {
   const rte = comboEnhTotal(combo, "Rolling Thunder Enhancement");
   const lde = comboEnhTotal(combo, "Lightning Domain Enhancement");
   const checks = [
-    { key:"hss", label:"HSS",            actual:hss, min:reqs.hss, unit:"%", pass:hss>=reqs.hss },
-    { key:"roe", label:"Rune Onslaught", actual:roe, min:reqs.roe, unit:"%", pass:roe>=reqs.roe },
-    { key:"hvf", label:"HVF",            actual:hvf, min:reqs.hvf, unit:"%", pass:hvf>=reqs.hvf },
-    { key:"rte", label:"Rolling Thunder",actual:rte, min:reqs.rte, unit:"%", pass:rte>=reqs.rte },
+    { key:"hss", label:"HSS",             actual:hss, min:reqs.hss, unit:"%", pass:hss>=reqs.hss },
+    { key:"roe", label:"Rune Onslaught",  actual:roe, min:reqs.roe, unit:"%", pass:roe>=reqs.roe },
+    { key:"hvf", label:"HVF",             actual:hvf, min:reqs.hvf, unit:"%", pass:hvf>=reqs.hvf },
+    { key:"rte", label:"Rolling Thunder", actual:rte, min:reqs.rte, unit:"%", pass:rte>=reqs.rte },
     { key:"lde", label:"Lightning Domain",actual:lde, min:reqs.lde, unit:"m", pass:lde>=reqs.lde },
   ];
   return { pass: checks.every(c => c.pass), checks };
@@ -163,14 +170,13 @@ function getMask(item) {
   return m;
 }
 
-export function optimize(weapons, accessories, exclusives, allItems) {
+export function optimize(weapons, accessories, exclusives) {
   if (!weapons.length || !accessories.length || !exclusives.length) return null;
 
   const reqs = getReqs();
-  const maxEnhValues = computeMaxEnhValues(allItems);
   const TARGET = (1 << MANDATORY_ENH.length) - 1;
 
-  // Pre-sort by display score for pruning
+  // Pre-sort by display score for early pruning
   const prep = arr => arr.map(i => ({ ...i, _mask:getMask(i) }))
     .sort((a, b) => scoreItem(b) - scoreItem(a));
   const [ws, as, es] = [prep(weapons), prep(accessories), prep(exclusives)];
@@ -181,25 +187,26 @@ export function optimize(weapons, accessories, exclusives, allItems) {
   for (const w of ws) {
     for (const a of as) {
       for (const e of es) {
-        const mask = w._mask | a._mask | e._mask;
-        const score = scoreCombo(w, a, e, maxEnhValues);
+        const mask      = w._mask | a._mask | e._mask;
+        const score     = scoreCombo(w, a, e);
         const reqResult = checkReqs(w, a, e, reqs);
-        const fullCoverage = mask === TARGET;
+        const fullCov   = mask === TARGET;
 
-        if (fullCoverage && reqResult.pass) {
+        if (fullCov && reqResult.pass) {
           if (score > bestFullScore) {
             bestFullScore = score;
             bestFull = { weapon:w, accessory:a, exclusive:e, score, full:true, reqResult };
           }
         } else {
-          const covCount = [0,1,2,3].filter(i => mask & (1<<i)).length;
-          const reqFailCount = reqResult.checks.filter(c => !c.pass).length;
-          const penalizedScore = score - (4-covCount)*500 - reqFailCount*200;
-          if (penalizedScore > bestPartialScore) {
-            bestPartialScore = penalizedScore;
+          // Rank partials: coverage count first, then threshold pass, then DPS
+          const covCount   = [0,1,2,3].filter(i => mask & (1<<i)).length;
+          const threshPass = reqResult.pass ? 1 : 0;
+          const q = covCount * 1e12 + threshPass * 1e9 + score;
+          if (q > bestPartialScore) {
+            bestPartialScore = q;
             bestPartial = {
               weapon:w, accessory:a, exclusive:e,
-              score, full:false, coverage:covCount, reqResult, penalizedScore
+              score, full:false, coverage:covCount, reqResult
             };
           }
         }
