@@ -494,7 +494,7 @@ function OptimizeTab({result, runOptimize, counts}) {
         {/* Optimize button + result banner (side by side once result exists) */}
         <div style={{display:"flex",gap:8,alignItems:"stretch"}}>
           <button onClick={runOptimize} disabled={!hasAll} style={{flex:1,padding:"20px 0",background:hasAll?"#130f00":"#0a0a0a",border:`2px solid ${hasAll?C.gold:C.border}`,borderRadius:12,color:hasAll?C.gold:C.textDim,fontWeight:700,fontSize:17,letterSpacing:2.5,cursor:hasAll?"pointer":"not-allowed",fontFamily:"'Courier New',monospace"}}>
-            {hasAll?"⚡ FIND OPTIMAL BUILD":"Add gear to all 3 slots first"}
+            {hasAll?"⚡ FIND BUILD":"Add gear to all 3 slots first"}
           </button>
           {result&&(
             <div style={{flex:1,padding:"0 10px",background:result.full?C.greenDim:"#2e1a00",border:`1px solid ${result.full?"#2a6a2a":"#6a3a00"}`,borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center"}}>
