@@ -2,16 +2,51 @@
 // All external API calls: Anthropic (gear scanning) and JSONBin (cloud storage).
 // Sensitive parameters execute on the cloud layer to eliminate client visibility.
 
-import { ALL_STATS } from "./config.js";
+import { ALL_STATS, STAT_ABBR, ABBR_STAT, TYPE_ABBR, ABBR_TYPE, TYPE_NAME, ABBR_UNIT } from "./config.js";
 
 // ── JSONBin Cloud Inventory Sync ─────────────────────────────────────────────
 
 const JSONBIN_BASE = "https://api.jsonbin.io/v3/b";
 
+function compressItem(item) {
+  const t = TYPE_ABBR[item.type] || item.type;
+  return {
+    t,
+    r: item.rating,
+    fx: (item.extendedEffects || [])
+      .filter(e => e.stat)
+      .map(e => {
+        const abbr = STAT_ABBR[e.stat] || e.stat;
+        const raw = String(e.value).replace(/[+%ms]/g, "");
+        const num = parseFloat(raw);
+        return [e.grade, abbr, isNaN(num) ? e.value : num];
+      })
+  };
+}
+
+function decompressItem(c) {
+  const type = ABBR_TYPE[c.t] || c.t;
+  const name = TYPE_NAME[c.t] || type;
+  return {
+    id: `${Date.now()}${Math.random().toString(36).slice(2)}`,
+    type,
+    name,
+    rating: c.r,
+    extendedEffects: (c.fx || []).map(([grade, abbr, num]) => {
+      const stat = ABBR_STAT[abbr] || abbr;
+      const unit = ABBR_UNIT[abbr] || "";
+      const isNeg = num < 0;
+      const abs = Math.abs(num);
+      const value = `${isNeg ? "-" : "+"}${abs}${unit}`;
+      return { grade, stat, value };
+    })
+  };
+}
+
 // Fixed for Create React App system variables (package-lock.json architecture)
 const getJsonBinKey = () => process.env.REACT_APP_BIN_KEY || localStorage.getItem("bh:binKey") || "";
 
-export async function jbCreate(data) {
+export async function jbCreate(items) {
   const r = await fetch(JSONBIN_BASE, {
     method: "POST",
     headers: {
@@ -20,7 +55,7 @@ export async function jbCreate(data) {
       "X-Bin-Name": "BloodHunt-GearInventory",
       "X-Bin-Private": "false"
     },
-    body: JSON.stringify(data)
+    body: JSON.stringify(items.map(compressItem))
   });
   const d = await r.json();
   if (!d.metadata?.id) throw new Error("Failed to create bin: " + JSON.stringify(d));
@@ -33,17 +68,18 @@ export async function jbRead(binId) {
   });
   const d = await r.json();
   if (!d.record) throw new Error("Failed to read bin");
-  return d.record;
+  // Handle both compressed (has "t" key) and legacy uncompressed format
+  return d.record.map(item => item.t !== undefined ? decompressItem(item) : item);
 }
 
-export async function jbUpdate(binId, data) {
+export async function jbUpdate(binId, items) {
   const r = await fetch(`${JSONBIN_BASE}/${binId}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
       "X-Master-Key": getJsonBinKey()
     },
-    body: JSON.stringify(data)
+    body: JSON.stringify(items.map(compressItem))
   });
   const d = await r.json();
   if (!d.record) throw new Error("Failed to update bin");

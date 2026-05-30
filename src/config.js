@@ -96,3 +96,60 @@ export const lbl = {
   display:"block", fontSize:13, color:"#7a7090",
   letterSpacing:1, marginBottom:6, textTransform:"uppercase"
 };
+
+// ── JSONBin compression maps ──────────────────────────────────────────────────
+
+export const STAT_ABBR = {
+  "High-Speed Shock Enhancement":                   "HSS",
+  "Rune Onslaught Enhancement":                     "ROE",
+  "High-Voltage Field Enhancement":                 "HVF",
+  "Lightning Domain Enhancement":                   "LDE",
+  "Rolling Thunder Enhancement":                    "RTE",
+  "Immortal Rune Enhancement":                      "IRE",
+  "Ultimate Storm Enhancement":                     "USE",
+  "Total Output Boost":                             "TOB",
+  "Total Damage Bonus":                             "TDB",
+  "Precision Rate":                                 "PR",
+  "Precision Damage":                               "PD",
+  "Critical Hit Rate":                              "CHR",
+  "Critical Damage":                                "CD",
+  "Health":                                         "HP",
+  "Percentage Health":                              "HPp",
+  "Armor":                                          "ARM",
+  "Block Rate":                                     "BR",
+  "Block Damage Reduction":                         "BDR",
+  "Dodge Rate":                                     "DR",
+  "Bonus Damage vs Bosses":                         "BDB",
+  "Bonus Damage vs Close-Range Enemies":            "BDCR",
+  "Damage Bonus vs Healthy Enemies":                "DBHE",
+  "Healing Rune Charge Slots":                      "HRCS",
+  "Healing Rune Cooldown Reduction":                "HRCR",
+  "Health Restored Per/s (Restorative Respire)":    "HRps",
+  "Health Restored on Kill":                        "HRK",
+};
+
+export const ABBR_STAT = Object.fromEntries(
+  Object.entries(STAT_ABBR).map(([k,v]) => [v,k])
+);
+
+export const TYPE_ABBR = { "Weapon":"W", "Accessory":"A", "Exclusive":"X", "Armor":"AR" };
+export const ABBR_TYPE = Object.fromEntries(
+  Object.entries(TYPE_ABBR).map(([k,v]) => [v,k])
+);
+
+export const TYPE_NAME = {
+  "W":  "Gaea Sigil",
+  "A":  "Alchemy Amulet",
+  "X":  "God Tempest's Wrath",
+  "AR": "Runic Armor",
+};
+
+export const ABBR_UNIT = {
+  "HSS":"%",  "ROE":"%",  "HVF":"%",  "RTE":"%",
+  "IRE":"",   "USE":"s",  "LDE":"m",
+  "TOB":"%",  "TDB":"%",  "PR":"%",   "PD":"%",
+  "CHR":"%",  "CD":"%",   "HP":"",    "HPp":"%",
+  "ARM":"",   "BR":"%",   "BDR":"",   "DR":"%",
+  "BDB":"%",  "BDCR":"%", "DBHE":"%",
+  "HRCS":"",  "HRCR":"%", "HRps":"",  "HRK":"",
+};
