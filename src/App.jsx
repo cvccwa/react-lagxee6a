@@ -11,7 +11,7 @@ import { jbCreate, jbRead, jbUpdate, fileToBase64, scanGearCard } from "./api.js
 
 function normalizeItem(i) {
   const fx = [...(i.extendedEffects||[])].sort((a,b)=>a.stat.localeCompare(b.stat));
-  return `${i.type}|${i.name}|${i.rating}|${fx.map(e=>`${e.stat}:${e.grade}:${e.value}`).join(",")}`;
+  return `${i.type.toLowerCase()}|${i.name.toLowerCase()}|${i.rating}|${fx.map(e=>`${e.stat}:${e.grade}:${e.value}`).join(",")}`;
 }
 
 function dedupeAgainstExisting(incoming, existing) {
@@ -419,12 +419,7 @@ function OptimizeTab({result,runOptimize,counts}) {
                   <div key={label} style={{fontSize:15,color:C.purpleLight,marginBottom:6}}>⚡ {label} ≥ {val}{unit}</div>
                 ))}
               </div>
-              <div>
-                <p style={{color:C.textDim,margin:"0 0 10px",fontSize:14,letterSpacing:1.5}}>PRIORITY STATS</p>
-                {Object.entries(STAT_W).filter(([,v])=>v>=4).sort((a,b)=>b[1]-a[1]).map(([k,v])=>(
-                  <div key={k} style={{fontSize:15,marginBottom:6,color:C.text}}>{k} <span style={{color:C.gold}}>×{v}</span></div>
-                ))}
-              </div>
+
             </div>
           )}
         </div>
