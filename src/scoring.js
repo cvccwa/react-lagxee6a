@@ -161,7 +161,7 @@ export function scoreCombo(w, a, e) {
   const pd_total     = (SKILL_PD + pd_gear * PD_GEAR_MULTIPLIER) / 100;
   const precision    = 1 + pr_total * (pd_total - 1);
   const output       = displayed_tob / 100;
-  const area         = Math.pow(SKILL_LDE + lde_gear, 2);
+  const area         = Math.pow(SKILL_LDE + lde_gear, 1.5);
 
   const dps = proj_damage * zap_damage * zap_freq * precision * output * area;
   return Math.round(dps * 100) / 100;
