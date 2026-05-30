@@ -2,9 +2,9 @@ import './style.css';
 import { useState, useEffect, useRef } from "react";
 import {
   ENHANCEMENTS, BASE_ATTRS, MANDATORY_ENH, GRADES, GRADE_COLOR,
-  STAT_W, C, typeColors, inp, sel, lbl
+  C, typeColors, inp, sel, lbl
 } from "./config.js";
-import { scoreItem, optimize, getReqs } from "./scoring.js";
+import { optimize, getReqs } from "./scoring.js";
 import { jbCreate, jbRead, jbUpdate, fileToBase64, scanGearCard } from "./api.js";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
@@ -43,6 +43,7 @@ function GearCard({item,onDelete,highlight}) {
           <span style={{color:C.gold,fontSize:16}}>★ {item.rating}</span>
         </div>
         <div style={{display:"flex",gap:10,alignItems:"center",flexShrink:0}}>
+
           <span style={{color:C.textDim,fontSize:20,userSelect:"none"}}>{expanded?"▲":"▼"}</span>
         </div>
       </div>
@@ -272,7 +273,7 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items}) {
 
 // ── Inventory Tab ─────────────────────────────────────────────────────────────
 
-function InventoryTab({items,filterType,setFilterType,sortBy,setSortBy,deleteItem,counts,onExport,onRestoreAll}) {
+function InventoryTab({items,filterType,setFilterType,deleteItem,counts,onExport,onRestoreAll}) {
   const [restoreText,setRestoreText] = useState("");
   const [showRestore,setShowRestore] = useState(false);
   const [restoreMsg,setRestoreMsg] = useState({text:"",ok:true});
@@ -382,46 +383,116 @@ function InventoryTab({items,filterType,setFilterType,sortBy,setSortBy,deleteIte
 
 // ── Optimize Tab ──────────────────────────────────────────────────────────────
 
-function OptimizeTab({result,runOptimize,counts}) {
-  const [showBuildInfo,setShowBuildInfo] = useState(false);
-  const hasAll=counts.Weapon>0&&counts.Accessory>0&&counts.Exclusive>0;
-  const reqs=getReqs();
+const SURVIVABILITY_STATS = [
+  { key:"Health",              label:"Health (flat)",         unit:""   },
+  { key:"Percentage Health",   label:"Health (%)",            unit:"%"  },
+  { key:"Armor",               label:"Armor Value",           unit:""   },
+  { key:"Block Rate",          label:"Block Rate",            unit:"%"  },
+  { key:"Block Damage Reduction", label:"Block Dmg Reduction",unit:""   },
+  { key:"Dodge Rate",          label:"Dodge Rate",            unit:"%"  },
+  { key:"Healing Rune Charge Slots", label:"Healing Rune Slots", unit:"" },
+  { key:"Healing Rune Cooldown Reduction", label:"Healing Rune CDR", unit:"%" },
+  { key:"Health Restored Per/s (Restorative Respire)", label:"Health/s (Respire)", unit:"" },
+  { key:"Health Restored on Kill", label:"Health on Kill",    unit:""   },
+];
+
+function getSurvivabilityTotals(weapon, accessory, exclusive) {
+  const combo = [weapon, accessory, exclusive];
+  return SURVIVABILITY_STATS.map(({key, label, unit}) => {
+    let total = 0;
+    for (const item of combo) {
+      for (const e of item.extendedEffects || []) {
+        if (e.stat === key) {
+          const n = parseFloat(String(e.value).replace(/[^0-9.]/g, ""));
+          if (!isNaN(n)) total += n;
+        }
+      }
+    }
+    return { label, unit, total };
+  }).filter(s => s.total > 0);
+}
+
+function OptimizeTab({result, runOptimize, counts}) {
+  const [showBuildInfo, setShowBuildInfo] = useState(false);
+  const hasAll = counts.Weapon > 0 && counts.Accessory > 0 && counts.Exclusive > 0;
+  const reqs = getReqs();
+
+  const survivability = result
+    ? getSurvivabilityTotals(result.weapon, result.accessory, result.exclusive)
+    : [];
 
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100%",gap:14,minHeight:0}}>
+
       {/* Fixed top section */}
       <div style={{flexShrink:0,display:"flex",flexDirection:"column",gap:12}}>
+
         {/* Slot counts */}
         <div style={{display:"flex",gap:10}}>
           {["Weapon","Accessory","Exclusive"].map(t=>(
             <div key={t} style={{flex:1,padding:"16px 10px",background:counts[t]>0?typeColors[t].bg:C.surface,border:`1px solid ${counts[t]>0?typeColors[t].border:C.border}`,borderRadius:12,textAlign:"center"}}>
-              <div style={{fontSize:34,fontWeight:700,color:counts[t]>0?typeColors[t].text:C.textDim}}>{counts[t]}</div>
-              <div style={{fontSize:13,color:C.textDim,letterSpacing:1,marginTop:2}}>{t.toUpperCase()}</div>
+              <div style={{fontSize:30,fontWeight:700,color:counts[t]>0?typeColors[t].text:C.textDim}}>{counts[t]}</div>
+              <div style={{fontSize:11,color:C.textDim,letterSpacing:1,marginTop:2}}>{t.toUpperCase()}</div>
             </div>
           ))}
         </div>
 
-        {/* Build info toggle */}
+        {/* Build Info toggle */}
         <div style={{background:C.surface,border:`1px solid #2a1a3a`,borderRadius:12,overflow:"hidden"}}>
           <button onClick={()=>setShowBuildInfo(s=>!s)} style={{width:"100%",padding:"16px 18px",background:"transparent",border:"none",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
-            <span style={{color:C.gold,fontSize:17,fontWeight:700,letterSpacing:1}}>ℹ PRECISION BUILD INFO</span>
+            <span style={{color:C.gold,fontSize:15,fontWeight:700,letterSpacing:1}}>ℹ PRECISION BUILD INFO</span>
             <span style={{color:C.textDim,fontSize:18}}>{showBuildInfo?"▲":"▼"}</span>
           </button>
           {showBuildInfo&&(
-            <div style={{padding:"0 18px 18px",display:"flex",gap:24,flexWrap:"wrap"}}>
+            <div style={{padding:"0 16px 16px",display:"flex",flexDirection:"column",gap:16}}>
+
+              {/* Threshold checks — always show config, show results if available */}
               <div>
-                <p style={{color:C.textDim,margin:"0 0 10px",fontSize:14,letterSpacing:1.5}}>THRESHOLDS</p>
-                {[["HSS",reqs.hss,"%"],["Rune Onslaught",reqs.roe,"%"],["HVF",reqs.hvf,"%"],["Rolling Thunder",reqs.rte,"%"],["Lightning Domain",reqs.lde,"m"]].map(([label,val,unit])=>(
-                  <div key={label} style={{fontSize:15,color:C.purpleLight,marginBottom:6}}>⚡ {label} ≥ {val}{unit}</div>
-                ))}
+                <p style={{color:C.textDim,margin:"0 0 10px",fontSize:11,letterSpacing:1.5}}>ENHANCEMENT THRESHOLDS</p>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {result ? result.reqResult.checks.map(ch=>(
+                    <div key={ch.key} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:14}}>
+                      <span style={{color:ch.pass?C.green:"#f87171"}}>{ch.pass?"✓":"✗"} {ch.label}</span>
+                      <span style={{color:ch.pass?C.green:C.orange}}>
+                        {Math.round(ch.actual*10)/10}{ch.unit} / {ch.min}{ch.unit}
+                        {!ch.pass&&<span style={{color:"#f87171"}}> (−{Math.round((ch.min-ch.actual)*10)/10}{ch.unit})</span>}
+                      </span>
+                    </div>
+                  )) : [
+                    {key:"hss",label:"HSS",min:reqs.hss,unit:"%"},
+                    {key:"roe",label:"Rune Onslaught",min:reqs.roe,unit:"%"},
+                    {key:"hvf",label:"HVF",min:reqs.hvf,unit:"%"},
+                    {key:"rte",label:"Rolling Thunder",min:reqs.rte,unit:"%"},
+                    {key:"lde",label:"Lightning Domain",min:reqs.lde,unit:"m"},
+                  ].map(r=>(
+                    <div key={r.key} style={{display:"flex",justifyContent:"space-between",fontSize:14}}>
+                      <span style={{color:C.purpleLight}}>⚡ {r.label}</span>
+                      <span style={{color:C.textDim}}>≥ {r.min}{r.unit}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
 
+              {/* Survivability — only after result */}
+              {result&&survivability.length>0&&(
+                <div>
+                  <p style={{color:C.textDim,margin:"0 0 10px",fontSize:11,letterSpacing:1.5}}>SURVIVABILITY (3 SLOTS, EXCL. ARMOR)</p>
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                    {survivability.map(s=>(
+                      <div key={s.label} style={{display:"flex",justifyContent:"space-between",fontSize:14}}>
+                        <span style={{color:C.text}}>{s.label}</span>
+                        <span style={{color:C.gold}}>{s.total > 0 && !Number.isInteger(s.total) ? s.total.toFixed(1) : s.total}{s.unit}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
 
         {/* Optimize button */}
-        <button onClick={runOptimize} disabled={!hasAll} style={{width:"100%",padding:"24px 0",background:hasAll?"#130f00":"#0a0a0a",border:`2px solid ${hasAll?C.gold:C.border}`,borderRadius:12,color:hasAll?C.gold:C.textDim,fontWeight:700,fontSize:19,letterSpacing:2.5,cursor:hasAll?"pointer":"not-allowed",fontFamily:"'Courier New',monospace"}}>
+        <button onClick={runOptimize} disabled={!hasAll} style={{width:"100%",padding:"20px 0",background:hasAll?"#130f00":"#0a0a0a",border:`2px solid ${hasAll?C.gold:C.border}`,borderRadius:12,color:hasAll?C.gold:C.textDim,fontWeight:700,fontSize:17,letterSpacing:2.5,cursor:hasAll?"pointer":"not-allowed",fontFamily:"'Courier New',monospace"}}>
           {hasAll?"⚡ FIND OPTIMAL BUILD":"Add gear to all 3 slots first"}
         </button>
       </div>
@@ -435,34 +506,22 @@ function OptimizeTab({result,runOptimize,counts}) {
           </div>
         ):(
           <div style={{display:"flex",flexDirection:"column",gap:12,paddingBottom:8}}>
-            <div style={{padding:"14px 18px",borderRadius:12,background:result.full?C.greenDim:"#2e1a00",border:`1px solid ${result.full?"#2a6a2a":"#6a3a00"}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
-              <div>
-                <span style={{color:result.full?C.green:C.orange,fontWeight:700,fontSize:19,display:"block"}}>{result.full?"✓ OPTIMAL BUILD":"⚠ BEST AVAILABLE"}</span>
-  
-              </div>
+            {/* Result banner */}
+            <div style={{padding:"14px 18px",borderRadius:12,background:result.full?C.greenDim:"#2e1a00",border:`1px solid ${result.full?"#2a6a2a":"#6a3a00"}`}}>
+              <span style={{color:result.full?C.green:C.orange,fontWeight:700,fontSize:19,display:"block"}}>
+                {result.full?"✓ OPTIMAL BUILD":"⚠ BEST AVAILABLE"}
+              </span>
             </div>
-            <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px"}}>
-              <p style={{color:C.textDim,margin:"0 0 12px",fontSize:13,letterSpacing:1.5}}>THRESHOLD CHECK</p>
-              <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                {result.reqResult.checks.map(ch=>(
-                  <div key={ch.key} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:15}}>
-                    <span style={{color:ch.pass?C.green:"#f87171"}}>{ch.pass?"✓":"✗"} {ch.label}</span>
-                    <span style={{color:ch.pass?C.green:C.orange}}>
-                      {Math.round(ch.actual*10)/10}{ch.unit} / {ch.min}{ch.unit}
-                      {!ch.pass&&<span style={{color:"#f87171"}}> (−{Math.round((ch.min-ch.actual)*10)/10}{ch.unit})</span>}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <p style={{color:C.textDim,fontSize:13,letterSpacing:1.5,margin:"4px 0 0"}}>RECOMMENDED LOADOUT</p>
-            {[result.weapon,result.accessory,result.exclusive].map(p=><GearCard key={p.id} item={{...p,_score:scoreItem(p)}} highlight/>)}
+            {/* Gear cards */}
+            <p style={{color:C.textDim,fontSize:12,letterSpacing:1.5,margin:"4px 0 0"}}>RECOMMENDED LOADOUT</p>
+            {[result.weapon,result.accessory,result.exclusive].map(p=><GearCard key={p.id} item={p} highlight/>)}
           </div>
         )}
       </div>
     </div>
   );
 }
+
 
 // ── Settings Panel ────────────────────────────────────────────────────────────
 
@@ -586,10 +645,9 @@ export default function App() {
   const [form,setForm] = useState(blankForm());
   const [loading,setLoading] = useState(true);
   const [filterType,setFilterType] = useState("All");
-  const [sortBy,setSortBy] = useState("rating");
   const [optimResult,setOptimResult] = useState(null);
   const [flash,setFlash] = useState(false);
-  const [exportJson,setExportJson] = useState("");
+  const [,setExportJson] = useState("");
   const [showSettings,setShowSettings] = useState(false);
 
   useEffect(()=>{
@@ -649,7 +707,7 @@ export default function App() {
       {/* Content — fills all space between header and nav */}
       <div style={{flex:1,overflow:"hidden",padding:"16px 16px 0",display:"flex",flexDirection:"column",minHeight:0}}>
         {tab==="add"&&<AddTab form={form} setForm={setForm} addItem={addItem} flash={flash} onBulkImport={bulkImport} items={items}/>}
-        {tab==="inventory"&&<InventoryTab items={displayItems} filterType={filterType} setFilterType={setFilterType} sortBy={sortBy} setSortBy={setSortBy} deleteItem={deleteItem} counts={counts} onExport={setExportJson} onRestoreAll={restoreAll}/>}
+        {tab==="inventory"&&<InventoryTab items={displayItems} filterType={filterType} setFilterType={setFilterType} deleteItem={deleteItem} counts={counts} onExport={setExportJson} onRestoreAll={restoreAll}/>}
         {tab==="optimize"&&<OptimizeTab result={optimResult} runOptimize={runOptimize} counts={counts}/>}
       </div>
 
