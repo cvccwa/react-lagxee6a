@@ -428,11 +428,11 @@ function OptimizeTab({result, runOptimize, counts}) {
       <div style={{flexShrink:0,display:"flex",flexDirection:"column",gap:12}}>
 
         {/* Slot counts */}
-        <div style={{display:"flex",gap:10}}>
+        <div style={{display:"flex",gap:8}}>
           {["Weapon","Accessory","Exclusive"].map(t=>(
-            <div key={t} style={{flex:1,padding:"16px 10px",background:counts[t]>0?typeColors[t].bg:C.surface,border:`1px solid ${counts[t]>0?typeColors[t].border:C.border}`,borderRadius:12,textAlign:"center"}}>
-              <div style={{fontSize:30,fontWeight:700,color:counts[t]>0?typeColors[t].text:C.textDim}}>{counts[t]}</div>
-              <div style={{fontSize:11,color:C.textDim,letterSpacing:1,marginTop:2}}>{t.toUpperCase()}</div>
+            <div key={t} style={{flex:1,padding:"8px 6px",background:counts[t]>0?typeColors[t].bg:C.surface,border:`1px solid ${counts[t]>0?typeColors[t].border:C.border}`,borderRadius:10,textAlign:"center"}}>
+              <div style={{fontSize:22,fontWeight:700,color:counts[t]>0?typeColors[t].text:C.textDim}}>{counts[t]}</div>
+              <div style={{fontSize:10,color:C.textDim,letterSpacing:1,marginTop:1}}>{t.toUpperCase()}</div>
             </div>
           ))}
         </div>
@@ -491,10 +491,19 @@ function OptimizeTab({result, runOptimize, counts}) {
           )}
         </div>
 
-        {/* Optimize button */}
-        <button onClick={runOptimize} disabled={!hasAll} style={{width:"100%",padding:"20px 0",background:hasAll?"#130f00":"#0a0a0a",border:`2px solid ${hasAll?C.gold:C.border}`,borderRadius:12,color:hasAll?C.gold:C.textDim,fontWeight:700,fontSize:17,letterSpacing:2.5,cursor:hasAll?"pointer":"not-allowed",fontFamily:"'Courier New',monospace"}}>
-          {hasAll?"⚡ FIND OPTIMAL BUILD":"Add gear to all 3 slots first"}
-        </button>
+        {/* Optimize button + result banner (side by side once result exists) */}
+        <div style={{display:"flex",gap:8,alignItems:"stretch"}}>
+          <button onClick={runOptimize} disabled={!hasAll} style={{flex:1,padding:"20px 0",background:hasAll?"#130f00":"#0a0a0a",border:`2px solid ${hasAll?C.gold:C.border}`,borderRadius:12,color:hasAll?C.gold:C.textDim,fontWeight:700,fontSize:17,letterSpacing:2.5,cursor:hasAll?"pointer":"not-allowed",fontFamily:"'Courier New',monospace"}}>
+            {hasAll?"⚡ FIND OPTIMAL BUILD":"Add gear to all 3 slots first"}
+          </button>
+          {result&&(
+            <div style={{flex:1,padding:"0 10px",background:result.full?C.greenDim:"#2e1a00",border:`1px solid ${result.full?"#2a6a2a":"#6a3a00"}`,borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <span style={{color:result.full?C.green:C.orange,fontWeight:700,fontSize:14,textAlign:"center",lineHeight:1.3}}>
+                {result.full?"✓ OPTIMAL BUILD":"⚠ BEST AVAILABLE"}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Scrollable results */}
@@ -506,13 +515,6 @@ function OptimizeTab({result, runOptimize, counts}) {
           </div>
         ):(
           <div style={{display:"flex",flexDirection:"column",gap:12,paddingBottom:8}}>
-            {/* Result banner */}
-            <div style={{padding:"14px 18px",borderRadius:12,background:result.full?C.greenDim:"#2e1a00",border:`1px solid ${result.full?"#2a6a2a":"#6a3a00"}`}}>
-              <span style={{color:result.full?C.green:C.orange,fontWeight:700,fontSize:19,display:"block"}}>
-                {result.full?"✓ OPTIMAL BUILD":"⚠ BEST AVAILABLE"}
-              </span>
-            </div>
-            {/* Gear cards */}
             <p style={{color:C.textDim,fontSize:12,letterSpacing:1.5,margin:"4px 0 0"}}>RECOMMENDED LOADOUT</p>
             {[result.weapon,result.accessory,result.exclusive].map(p=><GearCard key={p.id} item={p} highlight/>)}
           </div>
