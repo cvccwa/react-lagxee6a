@@ -273,7 +273,7 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items}) {
 
 // ── Inventory Tab ─────────────────────────────────────────────────────────────
 
-function InventoryTab({items,filterType,setFilterType,deleteItem,counts,onExport,onRestoreAll}) {
+function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts,onExport,onRestoreAll}) {
   const [restoreText,setRestoreText] = useState("");
   const [showRestore,setShowRestore] = useState(false);
   const [restoreMsg,setRestoreMsg] = useState({text:"",ok:true});
@@ -285,7 +285,7 @@ function InventoryTab({items,filterType,setFilterType,deleteItem,counts,onExport
   const getBinId = () => process.env.REACT_APP_BIN_ID || localStorage.getItem("bh:binId");
 
   const handleExport = () => {
-    const clean=items.map(({_score,...rest})=>rest);
+    const clean=allItems.map(({_score,...rest})=>rest);
     const json=JSON.stringify(clean,null,2);
     setExportText(json); setShowExport(true); setShowRestore(false); onExport(json);
   };
@@ -319,7 +319,7 @@ function InventoryTab({items,filterType,setFilterType,deleteItem,counts,onExport
     let binId=getBinId();
     setCloudLoading("save"); setCloudMsg("");
     try {
-      const clean=items.map(({_score,...rest})=>rest);
+      const clean=allItems.map(({_score,...rest})=>rest);
       if (!binId){binId=await jbCreate(clean);localStorage.setItem("bh:binId",binId);setCloudMsg(`✓ Created & saved ${clean.length} items`);}
       else {await jbUpdate(binId,clean);setCloudMsg(`✓ Saved ${clean.length} items`);}
     } catch(err) { setCloudMsg(`⚠ ${err.message}`); }
@@ -709,7 +709,7 @@ export default function App() {
       {/* Content — fills all space between header and nav */}
       <div style={{flex:1,overflow:"hidden",padding:"16px 16px 0",display:"flex",flexDirection:"column",minHeight:0}}>
         {tab==="add"&&<AddTab form={form} setForm={setForm} addItem={addItem} flash={flash} onBulkImport={bulkImport} items={items}/>}
-        {tab==="inventory"&&<InventoryTab items={displayItems} filterType={filterType} setFilterType={setFilterType} deleteItem={deleteItem} counts={counts} onExport={setExportJson} onRestoreAll={restoreAll}/>}
+        {tab==="inventory"&&<InventoryTab items={displayItems} allItems={items} filterType={filterType} setFilterType={setFilterType} deleteItem={deleteItem} counts={counts} onExport={setExportJson} onRestoreAll={restoreAll}/>}
         {tab==="optimize"&&<OptimizeTab result={optimResult} runOptimize={runOptimize} counts={counts}/>}
       </div>
 
