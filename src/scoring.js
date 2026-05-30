@@ -13,6 +13,12 @@ import { STAT_W, ENH_W, GRADE_M, MANDATORY_ENH, DEFAULT_REQS } from "./config.js
 const BASE_MB_PROJ_DAMAGE = 130;  // Mjolnir Bash base projectile damage
 const BASE_ZAP_DAMAGE     = 32;   // Base lightning zap damage per tick
 const BASE_ATTACK_SPEED   = 2;    // Base Mjolnir Bash attacks per second
+const BASE_ZAP_RATE       = 1;    // Base zap frequency at zero HSS investment
+                                   // Measured empirically: 5 zap ticks in 5 seconds
+                                   // with zero skills and zero gear assigned.
+                                   // Arcane Realm was likely active during measurement
+                                   // so true base may be slightly lower, but treated as
+                                   // a fixed constant since Arcane is always active.
 
 // ── Skill Tree Constants (Profile 1) ─────────────────────────────────────────
 // Fixed contributions from your consistent skill tree assignment.
@@ -150,7 +156,7 @@ export function scoreCombo(w, a, e) {
   const proj_damage  = BASE_MB_PROJ_DAMAGE * (1 + rte_gear / 100);
   const zap_damage   = BASE_ZAP_DAMAGE * (1 + (SKILL_HVF + hvf_gear) / 100);
   const attack_speed = BASE_ATTACK_SPEED * (1 + (SKILL_ATTACK_SPEED + roe_gear) / 100);
-  const zap_freq     = attack_speed * (SKILL_HSS + hss_gear) / 100;
+  const zap_freq     = BASE_ZAP_RATE + attack_speed * (SKILL_HSS + hss_gear) / 100;
   const pr_total     = (SKILL_PR + pr_gear) / 100;
   const pd_total     = (SKILL_PD + pd_gear * PD_GEAR_MULTIPLIER) / 100;
   const precision    = 1 + pr_total * (pd_total - 1);
