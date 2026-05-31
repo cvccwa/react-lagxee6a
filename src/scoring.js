@@ -5,7 +5,7 @@
 // To update skill tree profile: edit the SKILL_* constants below.
 // To update base game values: edit the BASE_* constants below.
 
-import { STAT_W, ENH_W, GRADE_M, MANDATORY_ENH, DEFAULT_REQS } from "./config.js";
+import { STAT_W, ENH_W, GRADE_M, MANDATORY_ENH, DEFAULT_REQS, DEFAULT_SKILLS } from "./config.js";
 
 // ── Base Game Constants ───────────────────────────────────────────────────────
 // Measured with zero gear AND zero skill points assigned.
@@ -21,16 +21,15 @@ const SKILL_ATTACK_SPEED = 100;   // % attack speed bonus: Enchanted Flurry (60%
 const SKILL_HSS          = 30;    // % HSS inherited from Mjolnir Bash attack speed
 const SKILL_HVF          = 150;   // % HVF from 3/3 High-Voltage Field trait
 const SKILL_LDE          = 4.5;   // m LDE from 3/3 Lightning Domain trait
-const SKILL_PR           = 6;     // % Precision Rate: 1% base + 5% skills
-const SKILL_PD           = 3350;  // % Precision Damage post ×2 multiplier: (800 base + 875 skill) × 2
 const SKILL_TOB          = 278;   // % Total Output Boost: 117% base + 161% skills (no DR — skills exempt)
 
-// ── Gear Modifiers ────────────────────────────────────────────────────────────
-
-// Gear Precision Damage is doubled by the ×200% Precision Damage skill trait
-// because gear adds into the pool before the multiplier is applied.
-// Confirmed empirically: 3350 + (1629 × 2) = 6608 ✓
-const PD_GEAR_MULTIPLIER = 2;
+// Read skill config from localStorage each call so Settings changes take effect without refresh
+function getSkills() {
+  try {
+    const saved = localStorage.getItem("bh:skills");
+    return saved ? { ...DEFAULT_SKILLS, ...JSON.parse(saved) } : { ...DEFAULT_SKILLS };
+  } catch { return { ...DEFAULT_SKILLS }; }
+}
 
 // ── Total Output Boost — Per-Item Diminishing Returns ────────────────────────
 // The game applies DR to each gear piece independently, then sums the results.
@@ -131,6 +130,7 @@ export function scoreItem(item) {
 export function scoreCombo(w, a, e) {
   // Enhancement gear totals (sum across all 3 pieces)
   const combo = [w, a, e];
+  const skills   = getSkills();
   const roe_gear = comboEnhTotal(combo, "Rune Onslaught Enhancement");
   const hss_gear = comboEnhTotal(combo, "High-Speed Shock Enhancement");
   const rte_gear = comboEnhTotal(combo, "Rolling Thunder Enhancement");
@@ -138,6 +138,8 @@ export function scoreCombo(w, a, e) {
   const lde_gear = comboEnhTotal(combo, "Lightning Domain Enhancement");
   const pr_gear  = comboEnhTotal(combo, "Precision Rate");
   const pd_gear  = comboEnhTotal(combo, "Precision Damage");
+  const cr_gear  = comboEnhTotal(combo, "Critical Hit Rate");
+  const cd_gear  = comboEnhTotal(combo, "Critical Damage");
 
   // TOB: per-item DR then sum (game's actual mechanic, fitted from data)
   const w_tob = itemStatValue(w, "Total Output Boost");
@@ -150,13 +152,20 @@ export function scoreCombo(w, a, e) {
   const zap_damage   = BASE_ZAP_DAMAGE * (1 + (SKILL_HVF + hvf_gear) / 100);
   // "1" = base proc rate of 1/sec confirmed empirically and consistent with community DPS calculator
   const zap_freq     = (1 + (SKILL_ATTACK_SPEED + roe_gear) / 100) * (1 + (SKILL_HSS + hss_gear) / 100);
-  const pr_total     = (SKILL_PR + pr_gear) / 100;
-  const pd_total     = (SKILL_PD + pd_gear * PD_GEAR_MULTIPLIER) / 100;
-  const precision    = 1 + pr_total * (pd_total - 1);
-  const output       = displayed_tob / 100;
-  const area         = Math.pow(SKILL_LDE + lde_gear, 1.5);
+  // Row 21 junction: pdMult=2 routes to PD×200%, pdMult=1.5 routes to CD×150%
+  const pdMult   = skills.pdMult;
+  const cdMult   = pdMult === 2 ? 1 : 1.5;
+  const pr_total = (1 + skills.pr + pr_gear) / 100;          // 1% base + skill + gear
+  const pd_total = (800 + skills.pd + pd_gear) * pdMult / 100;
+  const cr_total = (5 + skills.cr + cr_gear) / 100;           // 5% base + skill + gear
+  const cd_total = (150 + skills.cd + cd_gear) * cdMult / 100; // 150% base + skill + gear
+  const expected_hit = pr_total * pd_total
+                     + (1 - pr_total) * cr_total * cd_total
+                     + (1 - pr_total) * (1 - cr_total) * 1;
+  const output   = displayed_tob / 100;
+  const area     = Math.pow(SKILL_LDE + lde_gear, 1.5);
 
-  const dps = proj_damage * zap_damage * zap_freq * precision * output * area;
+  const dps = proj_damage * zap_damage * zap_freq * expected_hit * output * area;
   return Math.round(dps * 100) / 100;
 }
 
