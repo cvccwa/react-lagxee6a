@@ -10,8 +10,9 @@ import { STAT_W, ENH_W, GRADE_M, MANDATORY_ENH, DEFAULT_REQS, DEFAULT_SKILLS } f
 // ── Base Game Constants ───────────────────────────────────────────────────────
 // Measured with zero gear AND zero skill points assigned.
 
-const BASE_MB_PROJ_DAMAGE = 70;   // Mjolnir Bash base projectile damage
-const BASE_ZAP_DAMAGE     = 15;   // Base lightning zap damage per tick
+const BASE_MB_PROJ_DAMAGE = 20869; // 70 base + 20000 Gaea Sigil base effect + 799 God Tempest base effect
+const HVF_COEFFICIENT     = 49 / 90; // Fixed scaling coefficient for HVF→zap conversion, confirmed by community spreadsheet
+const BASE_CR_AMULET      = 16.2;  // Alchemy Amulet base effect — fixed on all Amulets, not in extendedEffects
 
 // ── Skill Tree Constants (Profile 1) ─────────────────────────────────────────
 // Fixed contributions from your consistent skill tree assignment.
@@ -148,8 +149,8 @@ export function scoreCombo(w, a, e) {
   const displayed_tob = SKILL_TOB + drTOB(w_tob) + drTOB(a_tob) + drTOB(e_tob);
 
   // DPS formula brackets
-  const proj_damage  = BASE_MB_PROJ_DAMAGE * (1 + rte_gear / 100);
-  const zap_damage   = BASE_ZAP_DAMAGE * (1 + (SKILL_HVF + hvf_gear) / 100);
+  const proj_damage = BASE_MB_PROJ_DAMAGE * (1 + rte_gear / 100);
+  const zap_damage  = proj_damage * (SKILL_HVF + hvf_gear) / 100 * HVF_COEFFICIENT;
   // "1" = base proc rate of 1/sec confirmed empirically and consistent with community DPS calculator
   const zap_freq     = (1 + (SKILL_ATTACK_SPEED + roe_gear) / 100) * (1 + (SKILL_HSS + hss_gear) / 100);
   // Row 21 junction: pdMult=2 routes to PD×200%, pdMult=1.5 routes to CD×150%
@@ -157,7 +158,7 @@ export function scoreCombo(w, a, e) {
   const cdMult   = pdMult === 2 ? 1 : 1.5;
   const pr_total = (1 + skills.pr + pr_gear) / 100;          // 1% base + skill + gear
   const pd_total = (800 + skills.pd + pd_gear) * pdMult / 100;
-  const cr_total = (5 + skills.cr + cr_gear) / 100;           // 5% base + skill + gear
+  const cr_total = (5 + skills.cr + BASE_CR_AMULET + cr_gear) / 100; // 5% base + skill + amulet base + gear
   const cd_total = (150 + skills.cd + cd_gear) * cdMult / 100; // 150% base + skill + gear
   const expected_hit = pr_total * pd_total
                      + (1 - pr_total) * cr_total * cd_total
