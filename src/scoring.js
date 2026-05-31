@@ -170,11 +170,9 @@ export function scoreCombo(w, a, e) {
   const output      = displayed_tob / 100;
   const area        = Math.pow(SKILL_LDE + lde_gear, 1.5);
 
-  // Two separate damage streams — additive not multiplicative
-  const MB_proj_DPS = proj_damage * proj_freq * expected_hit * output;
-  const field_DPS   = zap_damage  * zap_freq  * expected_hit * output * area;
+  const field_DPS = zap_damage * zap_freq * expected_hit * output * area;
 
-  return Math.round((MB_proj_DPS + field_DPS) * 100) / 100;
+  return Math.round(field_DPS * 100) / 100;
 }
 
 // ── Requirements Check ────────────────────────────────────────────────────────
