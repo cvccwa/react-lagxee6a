@@ -129,9 +129,10 @@ export function scoreItem(item) {
 //   DPS = proj_damage × zap_damage × zap_freq × precision × output × area
 
 export function scoreCombo(w, a, e) {
-  // Enhancement gear totals (sum across all 3 pieces)
   const combo = [w, a, e];
-  const skills   = getSkills();
+  const skills = getSkills();
+
+  // Gear totals
   const roe_gear = comboEnhTotal(combo, "Rune Onslaught Enhancement");
   const hss_gear = comboEnhTotal(combo, "High-Speed Shock Enhancement");
   const rte_gear = comboEnhTotal(combo, "Rolling Thunder Enhancement");
@@ -142,32 +143,38 @@ export function scoreCombo(w, a, e) {
   const cr_gear  = comboEnhTotal(combo, "Critical Hit Rate");
   const cd_gear  = comboEnhTotal(combo, "Critical Damage");
 
-  // TOB: per-item DR then sum (game's actual mechanic, fitted from data)
+  // TOB per-item DR then sum
   const w_tob = itemStatValue(w, "Total Output Boost");
   const a_tob = itemStatValue(a, "Total Output Boost");
   const e_tob = itemStatValue(e, "Total Output Boost");
   const displayed_tob = SKILL_TOB + drTOB(w_tob) + drTOB(a_tob) + drTOB(e_tob);
 
-  // DPS formula brackets
-  const proj_damage = BASE_MB_PROJ_DAMAGE * (1 + rte_gear / 100);
-  const zap_damage  = proj_damage * (SKILL_HVF + hvf_gear) / 100 * HVF_COEFFICIENT;
-  // "1" = base proc rate of 1/sec confirmed empirically and consistent with community DPS calculator
-  const zap_freq     = (1 + (SKILL_ATTACK_SPEED + roe_gear) / 100) * (1 + (SKILL_HSS + hss_gear) / 100);
-  // Row 21 junction: pdMult=2 routes to PD×200%, pdMult=1.5 routes to CD×150%
-  const pdMult   = skills.pdMult;
-  const cdMult   = pdMult === 2 ? 1 : 1.5;
-  const pr_total = (1 + skills.pr + pr_gear) / 100;          // 1% base + skill + gear
+  // Row 21 junction
+  const pdMult = skills.pdMult;
+  const cdMult = pdMult === 2 ? 1 : 1.5;
+
+  // Expected hit multiplier (precision checked first, then crit, then normal)
+  const pr_total = (1 + skills.pr + pr_gear) / 100;
   const pd_total = (800 + skills.pd + pd_gear) * pdMult / 100;
-  const cr_total = (5 + skills.cr + BASE_CR_AMULET + cr_gear) / 100; // 5% base + skill + amulet base + gear
-  const cd_total = (150 + skills.cd + cd_gear) * cdMult / 100; // 150% base + skill + gear
+  const cr_total = (5 + skills.cr + BASE_CR_AMULET + cr_gear) / 100;
+  const cd_total = (150 + skills.cd + cd_gear) * cdMult / 100;
   const expected_hit = pr_total * pd_total
                      + (1 - pr_total) * cr_total * cd_total
                      + (1 - pr_total) * (1 - cr_total) * 1;
-  const output   = displayed_tob / 100;
-  const area     = Math.pow(SKILL_LDE + lde_gear, 1.5);
 
-  const dps = proj_damage * zap_damage * zap_freq * expected_hit * output * area;
-  return Math.round(dps * 100) / 100;
+  // Shared mechanics
+  const proj_damage = BASE_MB_PROJ_DAMAGE * (1 + rte_gear / 100);
+  const proj_freq   = 1 + (SKILL_ATTACK_SPEED + roe_gear) / 100;
+  const zap_damage  = proj_damage * (SKILL_HVF + hvf_gear) / 100 * HVF_COEFFICIENT;
+  const zap_freq    = proj_freq * (SKILL_HSS + hss_gear) / 100;
+  const output      = displayed_tob / 100;
+  const area        = Math.pow(SKILL_LDE + lde_gear, 1.5);
+
+  // Two separate damage streams — additive not multiplicative
+  const MB_proj_DPS = proj_damage * proj_freq * expected_hit * output;
+  const field_DPS   = zap_damage  * zap_freq  * expected_hit * output * area;
+
+  return Math.round((MB_proj_DPS + field_DPS) * 100) / 100;
 }
 
 // ── Requirements Check ────────────────────────────────────────────────────────
