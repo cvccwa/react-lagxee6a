@@ -442,7 +442,7 @@ function OptimizeTab({result, runOptimize, counts}) {
         {/* Build Info toggle */}
         <div style={{background:C.surface,border:`1px solid #2a1a3a`,borderRadius:12,overflow:"hidden"}}>
           <button onClick={()=>setShowBuildInfo(s=>!s)} style={{width:"100%",padding:"16px 18px",background:"transparent",border:"none",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
-            <span style={{color:C.gold,fontSize:15,fontWeight:700,letterSpacing:1}}>ℹ PRECISION BUILD INFO</span>
+            <span style={{color:C.gold,fontSize:15,fontWeight:700,letterSpacing:1}}>ℹ BUILD INFO</span>
             <span style={{color:C.textDim,fontSize:18}}>{showBuildInfo?"▲":"▼"}</span>
           </button>
           {showBuildInfo&&(
@@ -635,7 +635,7 @@ function SettingsPanel({onClose,itemCount}) {
               </div>
             ))}
             <div style={{marginBottom:16}}>
-              <label style={{...lbl,fontSize:13,marginBottom:10}}>Row 21 Specialization</label>
+              <label style={{...lbl,fontSize:13,marginBottom:10}}>Damage Specialization</label>
               <div style={{display:"flex",gap:8}}>
                 <button onClick={()=>updateSkill("pdMult",2)} style={{flex:1,padding:"13px 0",background:skills.pdMult===2?"#130f00":"transparent",border:`2px solid ${skills.pdMult===2?C.gold:C.border}`,color:skills.pdMult===2?C.gold:C.textDim,borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:13,fontFamily:"'Courier New',monospace"}}>PD ×200%</button>
                 <button onClick={()=>updateSkill("pdMult",1.5)} style={{flex:1,padding:"13px 0",background:skills.pdMult===1.5?"#130f00":"transparent",border:`2px solid ${skills.pdMult===1.5?C.gold:C.border}`,color:skills.pdMult===1.5?C.gold:C.textDim,borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:13,fontFamily:"'Courier New',monospace"}}>CD ×150%</button>
