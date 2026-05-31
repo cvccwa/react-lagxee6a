@@ -5,7 +5,7 @@ import {
   C, typeColors, inp, sel, lbl, DEFAULT_SKILLS
 } from "./config.js";
 
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.1.2";
 import { optimize, getReqs } from "./scoring.js";
 import { jbCreate, jbRead, jbUpdate, fileToBase64, scanGearCard } from "./api.js";
 

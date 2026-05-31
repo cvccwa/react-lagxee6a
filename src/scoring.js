@@ -135,7 +135,6 @@ export function scoreCombo(w, a, e) {
   // Gear totals
   const roe_gear = comboEnhTotal(combo, "Rune Onslaught Enhancement");
   const hss_gear = comboEnhTotal(combo, "High-Speed Shock Enhancement");
-  const rte_gear = comboEnhTotal(combo, "Rolling Thunder Enhancement");
   const hvf_gear = comboEnhTotal(combo, "High-Voltage Field Enhancement");
   const lde_gear = comboEnhTotal(combo, "Lightning Domain Enhancement");
   const pr_gear  = comboEnhTotal(combo, "Precision Rate");
@@ -163,7 +162,7 @@ export function scoreCombo(w, a, e) {
                      + (1 - pr_total) * (1 - cr_total) * 1;
 
   // Shared mechanics
-  const proj_damage = BASE_MB_PROJ_DAMAGE * (1 + rte_gear / 100);
+  const proj_damage = BASE_MB_PROJ_DAMAGE;
   const proj_freq   = 1 + (SKILL_ATTACK_SPEED + roe_gear) / 100;
   const zap_damage  = proj_damage * (SKILL_HVF + hvf_gear) / 100 * HVF_COEFFICIENT;
   const zap_freq    = proj_freq * (SKILL_HSS + hss_gear) / 100;
@@ -189,13 +188,11 @@ export function checkReqs(w, a, e, reqs) {
   const hss = comboEnhTotal(combo, "High-Speed Shock Enhancement");
   const roe = comboEnhTotal(combo, "Rune Onslaught Enhancement");
   const hvf = comboEnhTotal(combo, "High-Voltage Field Enhancement");
-  const rte = comboEnhTotal(combo, "Rolling Thunder Enhancement");
   const lde = comboEnhTotal(combo, "Lightning Domain Enhancement");
   const checks = [
     { key:"hss", label:"HSS",             actual:hss, min:reqs.hss, unit:"%", pass:hss>=reqs.hss },
     { key:"roe", label:"Rune Onslaught",  actual:roe, min:reqs.roe, unit:"%", pass:roe>=reqs.roe },
     { key:"hvf", label:"HVF",             actual:hvf, min:reqs.hvf, unit:"%", pass:hvf>=reqs.hvf },
-    { key:"rte", label:"Rolling Thunder", actual:rte, min:reqs.rte, unit:"%", pass:rte>=reqs.rte },
     { key:"lde", label:"Lightning Domain",actual:lde, min:reqs.lde, unit:"m", pass:lde>=reqs.lde },
   ];
   return { pass: checks.every(c => c.pass), checks };
