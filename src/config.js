@@ -62,7 +62,6 @@ export const DEFAULT_REQS = {
   hss: 700,   // High-Speed Shock combined %
   roe: 200,   // Rune Onslaught combined %
   hvf: 1000,  // High-Voltage Field combined %
-  rte: 400,   // Rolling Thunder combined %
   lde: 5.0,   // Lightning Domain combined m
 };
 
