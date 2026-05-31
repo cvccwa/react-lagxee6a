@@ -2,8 +2,10 @@ import './style.css';
 import { useState, useEffect, useRef } from "react";
 import {
   ENHANCEMENTS, BASE_ATTRS, MANDATORY_ENH, GRADES, GRADE_COLOR,
-  C, typeColors, inp, sel, lbl
+  C, typeColors, inp, sel, lbl, DEFAULT_SKILLS
 } from "./config.js";
+
+const APP_VERSION = "1.1.0";
 import { optimize, getReqs } from "./scoring.js";
 import { jbCreate, jbRead, jbUpdate, fileToBase64, scanGearCard } from "./api.js";
 
@@ -532,16 +534,23 @@ function SettingsPanel({onClose,itemCount}) {
   const [binKey,setBinKey] = useState(()=>process.env.REACT_APP_BIN_KEY||localStorage.getItem("bh:binKey")||"");
   const [binId,setBinId] = useState(()=>process.env.REACT_APP_BIN_ID||localStorage.getItem("bh:binId")||"");
   const [reqs,setReqs] = useState(()=>getReqs());
+  const [skills,setSkills] = useState(()=>{
+    try{const s=localStorage.getItem("bh:skills");return s?{...DEFAULT_SKILLS,...JSON.parse(s)}:{...DEFAULT_SKILLS};}
+    catch{return{...DEFAULT_SKILLS};}
+  });
   const [apiSaved,setApiSaved] = useState(false);
   const [binKeySaved,setBinKeySaved] = useState(false);
   const [reqsSaved,setReqsSaved] = useState(false);
+  const [skillsSaved,setSkillsSaved] = useState(false);
   const [cloudMsg,setCloudMsg] = useState("");
   const [cloudLoading,setCloudLoading] = useState(false);
 
   const saveApiKey = () => { localStorage.setItem("bh:apiKey",apiKey.trim()); setApiSaved(true); setTimeout(()=>setApiSaved(false),1500); };
   const saveBinKey = () => { localStorage.setItem("bh:binKey",binKey.trim()); setBinKeySaved(true); setTimeout(()=>setBinKeySaved(false),1500); };
-  const saveReqs  = () => { localStorage.setItem("bh:reqs",JSON.stringify(reqs)); setReqsSaved(true); setTimeout(()=>setReqsSaved(false),1500); };
-  const updateReq = (k,v) => setReqs(r=>({...r,[k]:parseFloat(v)||0}));
+  const saveReqs   = () => { localStorage.setItem("bh:reqs",JSON.stringify(reqs)); setReqsSaved(true); setTimeout(()=>setReqsSaved(false),1500); };
+  const updateReq  = (k,v) => setReqs(r=>({...r,[k]:parseFloat(v)||0}));
+  const saveSkills = () => { localStorage.setItem("bh:skills",JSON.stringify(skills)); setSkillsSaved(true); setTimeout(()=>setSkillsSaved(false),1500); };
+  const updateSkill = (k,v) => setSkills(s=>({...s,[k]:parseFloat(v)||0}));
 
   const setupCloud = async () => {
     const activeKey=process.env.REACT_APP_BIN_KEY||localStorage.getItem("bh:binKey");
@@ -609,6 +618,34 @@ function SettingsPanel({onClose,itemCount}) {
             {cloudMsg&&<p style={{margin:"12px 0 0",fontSize:13,color:cloudMsg.startsWith("✓")?C.green:"#f87171"}}>{cloudMsg}</p>}
           </div>
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px"}}>
+            <h3 style={{color:C.gold,margin:"0 0 8px",fontSize:15,letterSpacing:1.5}}>SKILL CONFIGURATION</h3>
+            <p style={{color:C.textDim,fontSize:13,margin:"0 0 16px",lineHeight:1.7}}>Enter your total skill tree contributions for each stat.</p>
+            {[
+              {key:"cr",label:"Critical Hit Rate from skills",unit:"%"},
+              {key:"cd",label:"Critical Damage from skills",unit:"%"},
+              {key:"pr",label:"Precision Rate from skills",unit:"%"},
+              {key:"pd",label:"Precision Damage from skills (pre-multiplier)",unit:"%"},
+            ].map(({key,label,unit})=>(
+              <div key={key} style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+                <label style={{...lbl,marginBottom:0,flex:1,fontSize:13}}>{label}</label>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <input type="number" value={skills[key]} onChange={e=>updateSkill(key,e.target.value)} style={{...inp,width:95,textAlign:"right",padding:"11px 12px",fontSize:15}}/>
+                  <span style={{color:C.textDim,fontSize:14,minWidth:18}}>{unit}</span>
+                </div>
+              </div>
+            ))}
+            <div style={{marginBottom:16}}>
+              <label style={{...lbl,fontSize:13,marginBottom:10}}>Row 21 Specialization</label>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={()=>updateSkill("pdMult",2)} style={{flex:1,padding:"13px 0",background:skills.pdMult===2?"#130f00":"transparent",border:`2px solid ${skills.pdMult===2?C.gold:C.border}`,color:skills.pdMult===2?C.gold:C.textDim,borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:13,fontFamily:"'Courier New',monospace"}}>PD ×200%</button>
+                <button onClick={()=>updateSkill("pdMult",1.5)} style={{flex:1,padding:"13px 0",background:skills.pdMult===1.5?"#130f00":"transparent",border:`2px solid ${skills.pdMult===1.5?C.gold:C.border}`,color:skills.pdMult===1.5?C.gold:C.textDim,borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:13,fontFamily:"'Courier New',monospace"}}>CD ×150%</button>
+              </div>
+            </div>
+            <button onClick={saveSkills} style={{width:"100%",padding:"14px 0",background:skillsSaved?C.greenDim:"#130f00",border:`1.5px solid ${skillsSaved?C.green:C.gold}`,borderRadius:10,color:skillsSaved?C.green:C.gold,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>
+              {skillsSaved?"✓ Saved":"💾 Save Skill Config"}
+            </button>
+          </div>
+          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px"}}>
             <h3 style={{color:C.gold,margin:"0 0 8px",fontSize:17,letterSpacing:1.5}}>BUILD REQUIREMENTS</h3>
             <p style={{color:C.textDim,fontSize:15,margin:"0 0 16px",lineHeight:1.7}}>Minimum combined enhancement values across all 3 slots.</p>
             <div style={{display:"flex",flexDirection:"column",gap:14,marginBottom:16}}>
@@ -628,7 +665,7 @@ function SettingsPanel({onClose,itemCount}) {
           </div>
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px"}}>
             <h3 style={{color:C.gold,margin:"0 0 10px",fontSize:17,letterSpacing:1.5}}>ABOUT</h3>
-            <p style={{color:C.textDim,fontSize:15,margin:0,lineHeight:1.8}}>Blood Hunt Gear Optimizer · Thor Rune Awakening · Precision Build<br/>{itemCount} items in inventory</p>
+            <p style={{color:C.textDim,fontSize:13,margin:0,lineHeight:1.8}}>Blood Hunt Gear Optimizer · Thor Rune Awakening · Precision Build<br/>v{APP_VERSION} · {itemCount} items in inventory</p>
           </div>
         </div>
       </div>

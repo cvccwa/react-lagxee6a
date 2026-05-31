@@ -66,6 +66,15 @@ export const DEFAULT_REQS = {
   lde: 5.0,   // Lightning Domain combined m
 };
 
+// Default skill tree contributions (all configurable in Settings)
+export const DEFAULT_SKILLS = {
+  cr: 3,       // Critical Hit Rate from skills (%)
+  cd: 30,      // Critical Damage from skills (%)
+  pr: 5,       // Precision Rate from skills (%)
+  pd: 875,     // Precision Damage additive from skills (%, pre-multiplier)
+  pdMult: 2,   // Row 21 junction: 2 = PD×200%, 1.5 = CD×150%
+};
+
 // UI colors
 export const C = {
   bg:"#09090f", surface:"#0f0f1a", border:"#1e1e35", gold:"#e8c84a",
