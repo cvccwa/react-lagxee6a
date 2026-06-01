@@ -757,7 +757,7 @@ function BuildTab() {
 
 // ── Settings Panel ────────────────────────────────────────────────────────────
 
-function SettingsPanel({onClose, itemCount}) {
+function SettingsPanel({onClose, itemCount, debugEnabled, setDebugEnabled}) {
   const [apiKey,setApiKey] = useState(()=>localStorage.getItem("bh:apiKey")||"");
   const [binKey,setBinKey] = useState(()=>process.env.REACT_APP_BIN_KEY||localStorage.getItem("bh:binKey")||"");
   const [binId,setBinId] = useState(()=>process.env.REACT_APP_BIN_ID||localStorage.getItem("bh:binId")||"");
@@ -830,6 +830,18 @@ function SettingsPanel({onClose, itemCount}) {
             <h3 style={{color:C.gold,margin:"0 0 10px",fontSize:17,letterSpacing:1.5}}>ABOUT</h3>
             <p style={{color:C.textDim,fontSize:13,margin:0,lineHeight:1.8}}>Blood Hunt Gear Optimizer · Thor Rune Awakening · Precision Build<br/>v{APP_VERSION} · {itemCount} items in inventory</p>
           </div>
+          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px"}}>
+            <h3 style={{color:C.gold,margin:"0 0 10px",fontSize:17,letterSpacing:1.5}}>DEVELOPER</h3>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <span style={{color:C.text,fontSize:14}}>Debug Log Overlay</span>
+                <p style={{color:C.textDim,fontSize:12,margin:"4px 0 0",lineHeight:1.5}}>Shows live console logs on-screen for mobile debugging.</p>
+              </div>
+              <button onClick={()=>{const next=!debugEnabled;setDebugEnabled(next);localStorage.setItem("bh:debug",String(next));}} style={{marginLeft:14,padding:"10px 20px",background:debugEnabled?C.greenDim:"transparent",border:`1.5px solid ${debugEnabled?C.green:C.border}`,borderRadius:10,color:debugEnabled?C.green:C.textDim,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace",flexShrink:0}}>
+                {debugEnabled?"ON":"OFF"}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -838,11 +850,12 @@ function SettingsPanel({onClose, itemCount}) {
 
 // ── Debug Overlay ────────────────────────────────────────────────────────────
 
-function DebugOverlay() {
+function DebugOverlay({ enabled }) {
   const [logs, setLogs] = useState([]);
   const [visible, setVisible] = useState(true);
 
   useEffect(() => {
+    if (!enabled) return;
     const orig = console.log.bind(console);
     console.log = (...args) => {
       orig(...args);
@@ -852,9 +865,9 @@ function DebugOverlay() {
       setLogs(prev => [...prev.slice(-49), line]);
     };
     return () => { console.log = orig; };
-  }, []);
+  }, [enabled]);
 
-  if (logs.length === 0) return null;
+  if (!enabled || logs.length === 0) return null;
 
   return (
     <div style={{position:"fixed", bottom:82, right:8, zIndex:9999, maxWidth:"calc(100vw - 16px)", width:320}}>
@@ -890,6 +903,7 @@ export default function App() {
   const [flash,setFlash] = useState(false);
   const [,setExportJson] = useState("");
   const [showSettings,setShowSettings] = useState(false);
+  const [debugEnabled,setDebugEnabled] = useState(() => localStorage.getItem("bh:debug") === "true");
   const [savedCombos,setSavedCombos] = useState(() => {
     try { const s=localStorage.getItem("bh:saved_combos"); return s?JSON.parse(s):[]; } catch { return []; }
   });
@@ -995,8 +1009,8 @@ export default function App() {
         ))}
       </div>
 
-      {showSettings&&<SettingsPanel onClose={()=>setShowSettings(false)} itemCount={items.length}/>}
-      <DebugOverlay />
+      {showSettings&&<SettingsPanel onClose={()=>setShowSettings(false)} itemCount={items.length} debugEnabled={debugEnabled} setDebugEnabled={setDebugEnabled}/>}
+      <DebugOverlay enabled={debugEnabled}/>
     </div>
   );
 }
