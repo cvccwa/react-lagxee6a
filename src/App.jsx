@@ -4,10 +4,10 @@ import {
   ENHANCEMENTS, BASE_ATTRS, MANDATORY_ENH, GRADES, GRADE_COLOR,
   C, typeColors, inp, sel, lbl, DEFAULT_SKILLS, COMBO_VERSION
 } from "./config.js";
-import { optimize, getReqs, getSkills, comboEnhTotal, itemStatValue } from "./scoring.js";
+import { optimize, getReqs, checkReqs, getSkills, comboEnhTotal, itemStatValue } from "./scoring.js";
 import { jbCreate, jbRead, jbUpdate, fileToBase64, scanGearCard, compressItem, decompressItem } from "./api.js";
 
-const APP_VERSION = "1.2.0";
+const APP_VERSION = "1.2.1";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
@@ -41,8 +41,8 @@ function GearCard({item,onDelete,highlight}) {
       <div onClick={()=>setExpanded(e=>!e)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 18px",cursor:"pointer",gap:8,minHeight:64}}>
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",flex:1,minWidth:0}}>
           <TypeBadge type={item.type}/>
-          <span style={{color:C.text,fontWeight:600,fontSize:17}}>{item.name}</span>
-          <span style={{color:C.gold,fontSize:16}}>★ {item.rating}</span>
+          <span style={{color:C.text,fontWeight:600,fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"45%"}}>{item.name}</span>
+          <span style={{color:C.gold,fontSize:13,whiteSpace:"nowrap"}}>★ {item.rating}</span>
         </div>
         <div style={{display:"flex",gap:10,alignItems:"center",flexShrink:0}}>
           <span style={{color:C.textDim,fontSize:20,userSelect:"none"}}>{expanded?"▲":"▼"}</span>
@@ -412,7 +412,19 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
   const [activeTab, setActiveTab] = useState("current");
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveName, setSaveName] = useState("");
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [hasCalculated, setHasCalculated] = useState(false);
   const hasAll = counts.Weapon > 0 && counts.Accessory > 0 && counts.Exclusive > 0;
+
+  const handleOptimize = () => {
+    if (!hasAll || isCalculating) return;
+    setIsCalculating(true);
+    setTimeout(() => {
+      runOptimize();
+      setIsCalculating(false);
+      setHasCalculated(true);
+    }, 50);
+  };
 
   const getComboItems = (combo) => ({
     weapon: decompressItem(combo.w),
@@ -442,7 +454,9 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
 
   const getSurvivability = (w, a, e) => getSurvivabilityTotals(w, a, e);
 
-  const renderComboPanel = (w, a, e, reqResult, isCurrent) => {
+  const renderComboPanel = (w, a, e, reqResult, isCurrent, savedCombo = null) => {
+    const reqs = getReqs();
+    const displayedReqResult = reqResult || checkReqs(w, a, e, reqs);
     const stats = getStatTotals(w, a, e);
     const surv = getSurvivability(w, a, e);
     return (
@@ -456,23 +470,29 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
           {showBuildInfo && (
             <div style={{padding:"0 16px 16px", display:"flex", flexDirection:"column", gap:16}}>
 
-              {/* Enhancement thresholds */}
-              {reqResult && (
-                <div>
-                  <p style={{color:C.textDim, margin:"0 0 10px", fontSize:11, letterSpacing:1.5}}>ENHANCEMENT THRESHOLDS</p>
-                  <div style={{display:"flex", flexDirection:"column", gap:8}}>
-                    {reqResult.checks.map(ch => (
-                      <div key={ch.key} style={{display:"flex", justifyContent:"space-between", fontSize:14}}>
-                        <span style={{color:ch.pass ? C.green : "#f87171"}}>{ch.pass ? "✓" : "✗"} {ch.label}</span>
-                        <span style={{color:ch.pass ? C.green : C.orange}}>
-                          {Math.round(ch.actual * 10) / 10}{ch.unit} / {ch.min}{ch.unit}
-                          {!ch.pass && <span style={{color:"#f87171"}}> (−{Math.round((ch.min - ch.actual) * 10) / 10}{ch.unit})</span>}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+              {/* Date + delete for saved tabs — inside Build Info */}
+              {!isCurrent && savedCombo && (
+                <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", paddingBottom:12, borderBottom:`1px solid ${C.border}`, marginBottom:4}}>
+                  <span style={{color:C.textDim, fontSize:13}}>Saved {savedCombo.savedAt}</span>
+                  <button onClick={() => { deleteCombo(savedCombo.name); setActiveTab("current"); }} style={{background:"transparent", border:`1px solid #3a1010`, color:"#884444", borderRadius:6, padding:"6px 12px", cursor:"pointer", fontSize:12, fontFamily:"'Courier New',monospace"}}>✕ Delete</button>
                 </div>
               )}
+
+              {/* Enhancement thresholds */}
+              <div>
+                <p style={{color:C.textDim, margin:"0 0 10px", fontSize:11, letterSpacing:1.5}}>ENHANCEMENT THRESHOLDS</p>
+                <div style={{display:"flex", flexDirection:"column", gap:8}}>
+                  {displayedReqResult.checks.map(ch => (
+                    <div key={ch.key} style={{display:"flex", justifyContent:"space-between", fontSize:14}}>
+                      <span style={{color:ch.pass ? C.green : "#f87171"}}>{ch.pass ? "✓" : "✗"} {ch.label}</span>
+                      <span style={{color:ch.pass ? C.green : C.orange}}>
+                        {Math.round(ch.actual * 10) / 10}{ch.unit} / {ch.min}{ch.unit}
+                        {!ch.pass && <span style={{color:"#f87171"}}> (−{Math.round((ch.min - ch.actual) * 10) / 10}{ch.unit})</span>}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               {/* Damage stats */}
               <div>
@@ -537,8 +557,12 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
 
         {/* Find optimal button + result banner (same row) */}
         <div style={{display:"flex", gap:8, alignItems:"stretch"}}>
-          <button onClick={runOptimize} disabled={!hasAll} style={{flex:1, padding:"11px 0", background:hasAll?"#130f00":"#0a0a0a", border:`2px solid ${hasAll?C.gold:C.border}`, borderRadius:12, color:hasAll?C.gold:C.textDim, fontWeight:700, fontSize:result?13:15, letterSpacing:result?1:2, cursor:hasAll?"pointer":"not-allowed", fontFamily:"'Courier New',monospace"}}>
-            {hasAll ? "⚡ FIND OPTIMAL BUILD" : "Add gear to all 3 slots first"}
+          <button onClick={handleOptimize} disabled={!hasAll || isCalculating} style={{flex:1, padding:"11px 0", background:hasAll&&!isCalculating?"#130f00":"#0a0a0a", border:`2px solid ${hasAll&&!isCalculating?C.gold:C.border}`, borderRadius:12, color:hasAll&&!isCalculating?C.gold:C.textDim, fontWeight:700, fontSize:result?12:14, letterSpacing:result?0:1, cursor:hasAll&&!isCalculating?"pointer":"not-allowed", fontFamily:"'Courier New',monospace", display:"flex", alignItems:"center", justifyContent:"center", gap:8}}>
+            {isCalculating ? (
+              <><span style={{display:"inline-block", animation:"spin 1s linear infinite", fontSize:16}}>⚡</span>CALCULATING…</>
+            ) : hasAll ? (
+              hasCalculated ? "↺ RE-CALCULATE" : "⚡ FIND OPTIMAL BUILD"
+            ) : "Add gear to all 3 slots first"}
           </button>
           {result && (
             <div style={{flex:1, padding:"0 10px", borderRadius:12, background:result.full?C.greenDim:"#2e1a00", border:`1px solid ${result.full?"#2a6a2a":"#6a3a00"}`, display:"flex", alignItems:"center", justifyContent:"center"}}>
@@ -549,19 +573,19 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
           )}
         </div>
 
-        {/* Tab strip */}
+        {/* Tab strip — scrollable */}
         {(result || savedCombos.length > 0) && (
-          <div style={{display:"flex", border:`1px solid ${C.border}`, borderRadius:10, overflow:"hidden"}}>
-            <button onClick={() => setActiveTab("current")} style={{flex:1, padding:"11px 8px", background:activeTab==="current"?C.surface:"transparent", border:"none", borderBottom:`2px solid ${activeTab==="current"?C.gold:"transparent"}`, color:activeTab==="current"?C.gold:C.textDim, fontFamily:"'Courier New',monospace", fontSize:12, cursor:"pointer", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+          <div className="tab-strip" style={{display:"flex", overflowX:"auto", border:`1px solid ${C.border}`, borderRadius:10, scrollbarWidth:"none", msOverflowStyle:"none"}}>
+            <button onClick={() => setActiveTab("current")} style={{flexShrink:0, minWidth:"30%", padding:"11px 8px", background:activeTab==="current"?C.surface:"transparent", border:"none", borderBottom:`2px solid ${activeTab==="current"?C.gold:"transparent"}`, color:activeTab==="current"?C.gold:C.textDim, fontFamily:"'Courier New',monospace", fontSize:12, cursor:"pointer", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
               Current
             </button>
             {savedCombos.map(c => (
-              <button key={c.name} onClick={() => setActiveTab(c.name)} style={{flex:1, padding:"11px 8px", background:activeTab===c.name?C.surface:"transparent", border:"none", borderBottom:`2px solid ${activeTab===c.name?C.gold:"transparent"}`, borderLeft:`1px solid ${C.border}`, color:activeTab===c.name?C.gold:C.textDim, fontFamily:"'Courier New',monospace", fontSize:12, cursor:"pointer", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+              <button key={c.name} onClick={() => setActiveTab(c.name)} style={{flexShrink:0, minWidth:"30%", padding:"11px 8px", background:activeTab===c.name?C.surface:"transparent", border:"none", borderBottom:`2px solid ${activeTab===c.name?C.gold:"transparent"}`, borderLeft:`1px solid ${C.border}`, color:activeTab===c.name?C.gold:C.textDim, fontFamily:"'Courier New',monospace", fontSize:12, cursor:"pointer", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
                 {c.name}
               </button>
             ))}
             {result && (
-              <button onClick={() => {setSaveName(""); setShowSaveModal(true);}} style={{padding:"11px 14px", background:"transparent", border:"none", borderLeft:`1px solid ${C.border}`, color:C.textDim, cursor:"pointer", fontSize:18, flexShrink:0}}>
+              <button onClick={() => {setSaveName(""); setShowSaveModal(true);}} style={{flexShrink:0, padding:"11px 14px", background:"transparent", border:"none", borderLeft:`1px solid ${C.border}`, color:C.textDim, cursor:"pointer", fontSize:18}}>
                 +
               </button>
             )}
@@ -589,15 +613,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
             const saved = savedCombos.find(c => c.name === activeTab);
             if (!saved) return null;
             const { weapon, accessory, exclusive } = getComboItems(saved);
-            return (
-              <div style={{display:"flex", flexDirection:"column", gap:12}}>
-                <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", background:C.surface, border:`1px solid ${C.border}`, borderRadius:10}}>
-                  <span style={{color:C.textDim, fontSize:13}}>{saved.savedAt}</span>
-                  <button onClick={() => { deleteCombo(saved.name); setActiveTab("current"); }} style={{background:"transparent", border:"none", color:"#884444", cursor:"pointer", fontSize:13, fontFamily:"'Courier New',monospace", padding:"4px 8px"}}>✕ Delete</button>
-                </div>
-                {renderComboPanel(weapon, accessory, exclusive, null, false)}
-              </div>
-            );
+            return renderComboPanel(weapon, accessory, exclusive, null, false, saved);
           })()
         )}
       </div>
