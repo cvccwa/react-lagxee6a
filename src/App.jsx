@@ -7,7 +7,7 @@ import {
 import { optimize, getReqs, checkReqs, getSkills, comboEnhTotal, itemStatValue } from "./scoring.js";
 import { jbCreate, jbRead, jbUpdate, fileToBase64, scanGearCard, compressItem, decompressItem } from "./api.js";
 
-const APP_VERSION = "1.2.1";
+const APP_VERSION = "1.2.2";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
@@ -659,8 +659,6 @@ function BuildTab() {
   const updateSkill = (k, v) => setSkills(s => ({...s, [k]: v}));
 
   const saveAll = () => {
-    console.log("[saveAll] saving skills:", skills);
-    console.log("[saveAll] bossPriority value:", skills.bossPriority);
     localStorage.setItem("bh:reqs", JSON.stringify(reqs));
     localStorage.setItem("bh:skills", JSON.stringify(skills));
     setSaved(true);
@@ -738,7 +736,7 @@ function BuildTab() {
             <span style={{color:C.gold, fontSize:15, fontWeight:700}}>{skills.bossPriority}%</span>
           </div>
           <input type="range" min={0} max={100} step={5} value={skills.bossPriority}
-            onChange={e => { const v=parseInt(e.target.value); console.log("[slider] bossPriority →", v); updateSkill("bossPriority", v); }}
+            onChange={e => updateSkill("bossPriority", parseInt(e.target.value))}
             style={{width:"100%", accentColor:C.gold, cursor:"pointer"}}/>
           <div style={{display:"flex", justifyContent:"space-between", marginTop:4}}>
             <span style={{color:C.textDim, fontSize:11}}>Mob Clearing</span>

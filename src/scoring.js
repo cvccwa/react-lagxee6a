@@ -29,7 +29,6 @@ export function getSkills() {
   try {
     const saved = localStorage.getItem("bh:skills");
     const result = saved ? { ...DEFAULT_SKILLS, ...JSON.parse(saved) } : { ...DEFAULT_SKILLS };
-    console.log("[getSkills]", result); // DEBUG — remove after diagnosis
     return result;
   } catch { return { ...DEFAULT_SKILLS }; }
 }
@@ -171,10 +170,6 @@ export function scoreCombo(w, a, e) {
   const zap_freq    = proj_freq * (SKILL_HSS + hss_gear) / 100;
   const boss_priority = skills.bossPriority / 100;
   const tdb_factor  = 1 + (skills.tdbSkill + tdb_gear + boss_priority * boss_gear) / 100;
-  // DEBUG — remove after diagnosis
-  if (boss_gear > 0) {
-    console.log("[scoreCombo debug]", { boss_gear, tdb_gear, bossPriority: skills.bossPriority, tdbSkill: skills.tdbSkill, tdb_factor });
-  }
   const output      = displayed_tob / 100;
   const area        = Math.pow(SKILL_LDE + lde_gear, 1.5);
 
