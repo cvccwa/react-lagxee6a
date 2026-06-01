@@ -72,6 +72,7 @@ export const DEFAULT_SKILLS = {
   pr: 5,       // Precision Rate from skills (%)
   pd: 875,     // Precision Damage additive from skills (%, pre-multiplier)
   pdMult: 2,   // Row 21 junction: 2 = PD×200%, 1.5 = CD×150%
+  bossPriority: 50, // 0 = mob clearing, 100 = boss fight
 };
 
 // UI colors
