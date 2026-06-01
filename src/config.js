@@ -73,7 +73,10 @@ export const DEFAULT_SKILLS = {
   pd: 875,     // Precision Damage additive from skills (%, pre-multiplier)
   pdMult: 2,   // Row 21 junction: 2 = PD×200%, 1.5 = CD×150%
   bossPriority: 50, // 0 = mob clearing, 100 = boss fight
+  tdbSkill: 50,     // Total Damage Bonus from skill tree (Row 5, maxed)
 };
+
+export const COMBO_VERSION = 1; // increment if saved combo format changes
 
 // UI colors
 export const C = {

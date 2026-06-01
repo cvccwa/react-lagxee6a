@@ -8,7 +8,7 @@ import { ALL_STATS, STAT_ABBR, ABBR_STAT, TYPE_ABBR, ABBR_TYPE, TYPE_NAME, ABBR_
 
 const JSONBIN_BASE = "https://api.jsonbin.io/v3/b";
 
-function compressItem(item) {
+export function compressItem(item) {
   const t = TYPE_ABBR[item.type] || item.type;
   return {
     t,
@@ -24,7 +24,7 @@ function compressItem(item) {
   };
 }
 
-function decompressItem(c) {
+export function decompressItem(c) {
   const type = ABBR_TYPE[c.t] || c.t;
   const name = TYPE_NAME[c.t] || type;
   return {
