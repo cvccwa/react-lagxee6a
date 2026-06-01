@@ -28,7 +28,8 @@ const SKILL_TOB          = 278;   // % Total Output Boost: 117% base + 161% skil
 export function getSkills() {
   try {
     const saved = localStorage.getItem("bh:skills");
-    return saved ? { ...DEFAULT_SKILLS, ...JSON.parse(saved) } : { ...DEFAULT_SKILLS };
+    const result = saved ? { ...DEFAULT_SKILLS, ...JSON.parse(saved) } : { ...DEFAULT_SKILLS };
+    return result;
   } catch { return { ...DEFAULT_SKILLS }; }
 }
 

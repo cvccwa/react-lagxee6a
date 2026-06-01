@@ -7,7 +7,7 @@ import {
 import { optimize, getReqs, checkReqs, getSkills, comboEnhTotal, itemStatValue } from "./scoring.js";
 import { jbCreate, jbRead, jbUpdate, fileToBase64, scanGearCard, compressItem, decompressItem } from "./api.js";
 
-const APP_VERSION = "1.2.1";
+const APP_VERSION = "1.2.2";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
@@ -650,7 +650,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
 
 // ── Build Tab ─────────────────────────────────────────────────────────────────
 
-function BuildTab() {
+function BuildTab({ onSave }) {
   const [reqs, setReqs] = useState(() => getReqs());
   const [skills, setSkills] = useState(() => getSkills());
   const [saved, setSaved] = useState(false);
@@ -663,6 +663,7 @@ function BuildTab() {
     localStorage.setItem("bh:skills", JSON.stringify(skills));
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
+    if (onSave) onSave();
   };
 
   return (
@@ -755,7 +756,7 @@ function BuildTab() {
 
 // ── Settings Panel ────────────────────────────────────────────────────────────
 
-function SettingsPanel({onClose, itemCount}) {
+function SettingsPanel({onClose, itemCount, debugEnabled, setDebugEnabled}) {
   const [apiKey,setApiKey] = useState(()=>localStorage.getItem("bh:apiKey")||"");
   const [binKey,setBinKey] = useState(()=>process.env.REACT_APP_BIN_KEY||localStorage.getItem("bh:binKey")||"");
   const [binId,setBinId] = useState(()=>process.env.REACT_APP_BIN_ID||localStorage.getItem("bh:binId")||"");
@@ -828,8 +829,60 @@ function SettingsPanel({onClose, itemCount}) {
             <h3 style={{color:C.gold,margin:"0 0 10px",fontSize:17,letterSpacing:1.5}}>ABOUT</h3>
             <p style={{color:C.textDim,fontSize:13,margin:0,lineHeight:1.8}}>Blood Hunt Gear Optimizer · Thor Rune Awakening · Precision Build<br/>v{APP_VERSION} · {itemCount} items in inventory</p>
           </div>
+          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px"}}>
+            <h3 style={{color:C.gold,margin:"0 0 10px",fontSize:17,letterSpacing:1.5}}>DEVELOPER</h3>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <span style={{color:C.text,fontSize:14}}>Debug Log Overlay</span>
+                <p style={{color:C.textDim,fontSize:12,margin:"4px 0 0",lineHeight:1.5}}>Shows live console logs on-screen for mobile debugging.</p>
+              </div>
+              <button onClick={()=>{const next=!debugEnabled;setDebugEnabled(next);localStorage.setItem("bh:debug",String(next));}} style={{marginLeft:14,padding:"10px 20px",background:debugEnabled?C.greenDim:"transparent",border:`1.5px solid ${debugEnabled?C.green:C.border}`,borderRadius:10,color:debugEnabled?C.green:C.textDim,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace",flexShrink:0}}>
+                {debugEnabled?"ON":"OFF"}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Debug Overlay ────────────────────────────────────────────────────────────
+
+function DebugOverlay({ enabled }) {
+  const [logs, setLogs] = useState([]);
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const orig = console.log.bind(console);
+    console.log = (...args) => {
+      orig(...args);
+      const line = args.map(a =>
+        a !== null && typeof a === "object" ? JSON.stringify(a, null, 1) : String(a)
+      ).join(" ");
+      setLogs(prev => [...prev.slice(-49), line]);
+    };
+    return () => { console.log = orig; };
+  }, [enabled]);
+
+  if (!enabled || logs.length === 0) return null;
+
+  return (
+    <div style={{position:"fixed", bottom:82, right:8, zIndex:9999, maxWidth:"calc(100vw - 16px)", width:320}}>
+      <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4}}>
+        <button onClick={() => setVisible(v => !v)} style={{background:"#1a1a2e", border:"1px solid #444", color:"#4ade80", borderRadius:6, padding:"4px 10px", fontSize:12, fontFamily:"monospace", cursor:"pointer"}}>
+          🐛 {logs.length} logs {visible ? "▲" : "▼"}
+        </button>
+        <button onClick={() => setLogs([])} style={{background:"transparent", border:"1px solid #444", color:"#888", borderRadius:6, padding:"4px 8px", fontSize:11, fontFamily:"monospace", cursor:"pointer"}}>
+          Clear
+        </button>
+      </div>
+      {visible && (
+        <div style={{background:"rgba(5,5,15,0.96)", border:"1px solid #2a2a4a", borderRadius:8, padding:"8px 10px", maxHeight:240, overflowY:"auto", fontSize:11, fontFamily:"'Courier New',monospace", color:"#4ade80", lineHeight:1.6, wordBreak:"break-all"}}>
+          {logs.map((l, i) => <div key={i} style={{borderBottom:"1px solid #111", paddingBottom:3, marginBottom:3}}>{l}</div>)}
+        </div>
+      )}
     </div>
   );
 }
@@ -849,6 +902,7 @@ export default function App() {
   const [flash,setFlash] = useState(false);
   const [,setExportJson] = useState("");
   const [showSettings,setShowSettings] = useState(false);
+  const [debugEnabled,setDebugEnabled] = useState(() => localStorage.getItem("bh:debug") === "true");
   const [savedCombos,setSavedCombos] = useState(() => {
     try { const s=localStorage.getItem("bh:saved_combos"); return s?JSON.parse(s):[]; } catch { return []; }
   });
@@ -936,7 +990,7 @@ export default function App() {
         {tab==="add"&&<AddTab form={form} setForm={setForm} addItem={addItem} flash={flash} onBulkImport={bulkImport} items={items}/>}
         {tab==="inventory"&&<InventoryTab items={displayItems} allItems={items} filterType={filterType} setFilterType={setFilterType} deleteItem={deleteItem} counts={counts} onExport={setExportJson} onRestoreAll={restoreAll}/>}
         {tab==="optimize"&&<OptimizeTab result={optimResult} runOptimize={runOptimize} counts={counts} savedCombos={savedCombos} saveCombo={saveCombo} deleteCombo={deleteCombo}/>}
-        {tab==="build"&&<BuildTab/>}
+        {tab==="build"&&<BuildTab onSave={optimResult ? runOptimize : undefined}/>}
       </div>
 
       {/* Bottom nav */}
@@ -954,7 +1008,8 @@ export default function App() {
         ))}
       </div>
 
-      {showSettings&&<SettingsPanel onClose={()=>setShowSettings(false)} itemCount={items.length}/>}
+      {showSettings&&<SettingsPanel onClose={()=>setShowSettings(false)} itemCount={items.length} debugEnabled={debugEnabled} setDebugEnabled={setDebugEnabled}/>}
+      <DebugOverlay enabled={debugEnabled}/>
     </div>
   );
 }
