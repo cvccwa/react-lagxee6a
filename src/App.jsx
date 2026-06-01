@@ -650,7 +650,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
 
 // ── Build Tab ─────────────────────────────────────────────────────────────────
 
-function BuildTab() {
+function BuildTab({ onSave }) {
   const [reqs, setReqs] = useState(() => getReqs());
   const [skills, setSkills] = useState(() => getSkills());
   const [saved, setSaved] = useState(false);
@@ -663,6 +663,7 @@ function BuildTab() {
     localStorage.setItem("bh:skills", JSON.stringify(skills));
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
+    if (onSave) onSave();
   };
 
   return (
@@ -989,7 +990,7 @@ export default function App() {
         {tab==="add"&&<AddTab form={form} setForm={setForm} addItem={addItem} flash={flash} onBulkImport={bulkImport} items={items}/>}
         {tab==="inventory"&&<InventoryTab items={displayItems} allItems={items} filterType={filterType} setFilterType={setFilterType} deleteItem={deleteItem} counts={counts} onExport={setExportJson} onRestoreAll={restoreAll}/>}
         {tab==="optimize"&&<OptimizeTab result={optimResult} runOptimize={runOptimize} counts={counts} savedCombos={savedCombos} saveCombo={saveCombo} deleteCombo={deleteCombo}/>}
-        {tab==="build"&&<BuildTab/>}
+        {tab==="build"&&<BuildTab onSave={optimResult ? runOptimize : undefined}/>}
       </div>
 
       {/* Bottom nav */}
