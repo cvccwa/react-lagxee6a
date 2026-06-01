@@ -5,7 +5,7 @@ import {
   C, typeColors, inp, sel, lbl, DEFAULT_SKILLS
 } from "./config.js";
 
-const APP_VERSION = "1.1.3";
+const APP_VERSION = "1.1.4";
 import { optimize, getReqs } from "./scoring.js";
 import { jbCreate, jbRead, jbUpdate, fileToBase64, scanGearCard } from "./api.js";
 
@@ -634,6 +634,25 @@ function SettingsPanel({onClose,itemCount}) {
                 </div>
               </div>
             ))}
+            <div style={{marginBottom:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                <label style={{...lbl,marginBottom:0,fontSize:13}}>Boss Fight Priority</label>
+                <span style={{color:C.gold,fontSize:15,fontWeight:700}}>{skills.bossPriority}%</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={skills.bossPriority}
+                onChange={e => updateSkill("bossPriority", parseInt(e.target.value))}
+                style={{width:"100%",accentColor:C.gold,cursor:"pointer"}}
+              />
+              <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+                <span style={{color:C.textDim,fontSize:11}}>Mob Clearing</span>
+                <span style={{color:C.textDim,fontSize:11}}>Boss Fight</span>
+              </div>
+            </div>
             <div style={{marginBottom:16}}>
               <label style={{...lbl,fontSize:13,marginBottom:10}}>Damage Specialization</label>
               <div style={{display:"flex",gap:8}}>

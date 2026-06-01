@@ -136,7 +136,8 @@ export function scoreCombo(w, a, e) {
   const hss_gear = comboEnhTotal(combo, "High-Speed Shock Enhancement");
   const hvf_gear = comboEnhTotal(combo, "High-Voltage Field Enhancement");
   const lde_gear = comboEnhTotal(combo, "Lightning Domain Enhancement");
-  const tdb_gear = comboEnhTotal(combo, "Total Damage Bonus");
+  const tdb_gear  = comboEnhTotal(combo, "Total Damage Bonus");
+  const boss_gear = comboEnhTotal(combo, "Bonus Damage vs Bosses");
   const pr_gear  = comboEnhTotal(combo, "Precision Rate");
   const pd_gear  = comboEnhTotal(combo, "Precision Damage");
   const cr_gear  = comboEnhTotal(combo, "Critical Hit Rate");
@@ -166,7 +167,8 @@ export function scoreCombo(w, a, e) {
   const proj_freq   = 1 + (SKILL_ATTACK_SPEED + roe_gear) / 100;
   const zap_damage  = proj_damage * (SKILL_HVF + hvf_gear) / 100 * HVF_COEFFICIENT;
   const zap_freq    = proj_freq * (SKILL_HSS + hss_gear) / 100;
-  const tdb_factor  = 1 + tdb_gear / 100;
+  const boss_priority = skills.bossPriority / 100;
+  const tdb_factor  = 1 + (tdb_gear + boss_priority * boss_gear) / 100;
   const output      = displayed_tob / 100;
   const area        = Math.pow(SKILL_LDE + lde_gear, 1.5);
 
