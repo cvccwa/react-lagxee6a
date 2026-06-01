@@ -2,12 +2,12 @@ import './style.css';
 import { useState, useEffect, useRef } from "react";
 import {
   ENHANCEMENTS, BASE_ATTRS, MANDATORY_ENH, GRADES, GRADE_COLOR,
-  C, typeColors, inp, sel, lbl, DEFAULT_SKILLS
+  C, typeColors, inp, sel, lbl, DEFAULT_SKILLS, COMBO_VERSION
 } from "./config.js";
+import { optimize, getReqs, getSkills, comboEnhTotal, itemStatValue } from "./scoring.js";
+import { jbCreate, jbRead, jbUpdate, fileToBase64, scanGearCard, compressItem, decompressItem } from "./api.js";
 
-const APP_VERSION = "1.1.4";
-import { optimize, getReqs } from "./scoring.js";
-import { jbCreate, jbRead, jbUpdate, fileToBase64, scanGearCard } from "./api.js";
+const APP_VERSION = "1.2.0";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
@@ -45,7 +45,6 @@ function GearCard({item,onDelete,highlight}) {
           <span style={{color:C.gold,fontSize:16}}>★ {item.rating}</span>
         </div>
         <div style={{display:"flex",gap:10,alignItems:"center",flexShrink:0}}>
-
           <span style={{color:C.textDim,fontSize:20,userSelect:"none"}}>{expanded?"▲":"▼"}</span>
         </div>
       </div>
@@ -159,21 +158,18 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items}) {
       {/* ── SCAN MODE ── */}
       {mode==="scan"&&(
         <div style={{display:"flex",flexDirection:"column",flex:1,gap:14,minHeight:0}}>
-          {/* Info box */}
           <div style={{background:"#0d0d1f",border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 18px",flexShrink:0}}>
             <p style={{margin:"0 0 5px",color:C.gold,fontSize:17,fontWeight:700}}>📷 MULTI-PHOTO SCAN</p>
             <p style={{margin:0,color:C.textDim,fontSize:15,lineHeight:1.8}}>Select up to 10 gear card screenshots. Claude reads each card and extracts stats automatically.</p>
           </div>
 
           {!hasPhotos ? (
-            /* No photos — big centered select button fills remaining space */
             <label htmlFor="gear-photos" style={{display:"flex",alignItems:"center",justifyContent:"center",flex:1,background:"#0d0d1f",border:`3px dashed ${C.purpleLight}`,borderRadius:20,cursor:"pointer",color:C.purpleLight,fontSize:22,fontWeight:700,letterSpacing:1.5,flexDirection:"column",gap:16}}>
               <span style={{fontSize:72}}>📷</span>
               <span>+ SELECT PHOTOS</span>
               <span style={{fontSize:15,color:C.textDim,fontWeight:400}}>Tap to choose from camera roll</span>
             </label>
           ) : (
-            /* Photos queued — grid + actions */
             <div style={{display:"flex",flexDirection:"column",flex:1,gap:12,minHeight:0}}>
               <div style={{overflowY:"auto",flex:1}}>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
@@ -188,7 +184,6 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items}) {
                 </div>
               </div>
 
-              {/* Status + add more */}
               <div style={{display:"flex",gap:12,fontSize:15,color:C.textDim,alignItems:"center",flexShrink:0}}>
                 {pendingCount>0&&<span>⏳ {pendingCount} queued</span>}
                 {doneCount>0&&<span style={{color:C.green}}>✓ {doneCount} done</span>}
@@ -197,7 +192,6 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items}) {
                 <button onClick={()=>setPhotos([])} style={{background:"transparent",border:"none",color:C.textDim,cursor:"pointer",fontSize:13,fontFamily:"'Courier New',monospace"}}>Clear</button>
               </div>
 
-              {/* Action buttons */}
               <div style={{display:"flex",gap:10,flexShrink:0}}>
                 {pendingCount>0&&<button onClick={scanAll} disabled={scanning} style={{flex:2,padding:"22px 0",background:scanning?"#111":"#130f00",border:`2px solid ${scanning?C.border:C.gold}`,borderRadius:12,color:scanning?C.textDim:C.gold,fontWeight:700,fontSize:18,letterSpacing:2,cursor:scanning?"not-allowed":"pointer",fontFamily:"'Courier New',monospace"}}>{scanning?"⚡ SCANNING…":"⚡ SCAN ALL"}</button>}
                 {doneCount>0&&<button onClick={addScanned} style={{flex:1,padding:"22px 0",background:C.greenDim,border:`2px solid ${C.green}`,borderRadius:12,color:C.green,fontWeight:700,fontSize:18,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>✓ ADD {doneCount}</button>}
@@ -358,18 +352,17 @@ function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts
           {showRestore&&<div style={{marginTop:12}}><textarea value={restoreText} onChange={e=>setRestoreText(e.target.value)} placeholder="Paste exported JSON here..." style={{...inp,height:110,resize:"vertical",fontSize:13}}/><button onClick={handleRestore} style={{marginTop:10,width:"100%",padding:"13px 0",background:"#130f00",border:`1.5px solid ${C.gold}`,borderRadius:10,color:C.gold,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>↩ Restore Inventory</button></div>}
         </div>
 
-        {/* Filter / sort */}
+        {/* Filter */}
         <div style={{display:"flex",gap:6,flexWrap:"nowrap",overflowX:"auto",alignItems:"center"}}>
           {["All","Weapon","Accessory","Exclusive"].map(t=>(
             <button key={t} onClick={()=>setFilterType(t)} style={{padding:"8px 10px",background:filterType===t?"#1a1200":"transparent",border:`1.5px solid ${filterType===t?C.gold:C.border}`,color:filterType===t?C.gold:C.textDim,borderRadius:8,cursor:"pointer",fontSize:13,fontFamily:"'Courier New',monospace",whiteSpace:"nowrap",flexShrink:0}}>
               {t}{t!=="All"?` (${counts[t]})`:` (${items.length})`}
             </button>
           ))}
-
         </div>
       </div>
 
-      {/* Scrollable item list — fills remaining space */}
+      {/* Scrollable item list */}
       <div style={{flex:1,overflowY:"auto",minHeight:0}}>
         {items.length===0?(
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",color:C.textDim,textAlign:"center",padding:"0 20px"}}>
@@ -414,74 +407,101 @@ function getSurvivabilityTotals(weapon, accessory, exclusive) {
   }).filter(s => s.total > 0);
 }
 
-function OptimizeTab({result, runOptimize, counts}) {
+function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, deleteCombo}) {
   const [showBuildInfo, setShowBuildInfo] = useState(false);
+  const [activeTab, setActiveTab] = useState("current");
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [saveName, setSaveName] = useState("");
   const hasAll = counts.Weapon > 0 && counts.Accessory > 0 && counts.Exclusive > 0;
-  const reqs = getReqs();
 
-  const survivability = result
-    ? getSurvivabilityTotals(result.weapon, result.accessory, result.exclusive)
-    : [];
+  const getComboItems = (combo) => ({
+    weapon: decompressItem(combo.w),
+    accessory: decompressItem(combo.a),
+    exclusive: decompressItem(combo.e),
+  });
 
-  return (
-    <div style={{display:"flex",flexDirection:"column",height:"100%",gap:14,minHeight:0}}>
+  const getStatTotals = (w, a, e) => {
+    const combo = [w, a, e];
+    const skills = getSkills();
+    const pr_gear = comboEnhTotal(combo, "Precision Rate");
+    const pd_gear = comboEnhTotal(combo, "Precision Damage");
+    const cr_gear = comboEnhTotal(combo, "Critical Hit Rate");
+    const cd_gear = comboEnhTotal(combo, "Critical Damage");
+    const tob_w = itemStatValue(w, "Total Output Boost");
+    const tob_a = itemStatValue(a, "Total Output Boost");
+    const tob_e = itemStatValue(e, "Total Output Boost");
+    const tdb = comboEnhTotal(combo, "Total Damage Bonus");
+    const boss = comboEnhTotal(combo, "Bonus Damage vs Bosses");
+    const displayed_tob = Math.round(278 + 11.5 * Math.sqrt(tob_w) + 11.5 * Math.sqrt(tob_a) + 11.5 * Math.sqrt(tob_e));
+    const pr_total = Math.round((1 + skills.pr + pr_gear) * 10) / 10;
+    const pd_total = Math.round((800 + skills.pd + pd_gear) * skills.pdMult);
+    const cr_total = Math.round((5 + skills.cr + 16.2 + cr_gear) * 10) / 10;
+    const cd_total = Math.round((150 + skills.cd + cd_gear) * (skills.pdMult === 2 ? 1 : 1.5));
+    return { pr_total, pd_total, cr_total, cd_total, displayed_tob, tdb, boss };
+  };
 
-      {/* Fixed top section */}
-      <div style={{flexShrink:0,display:"flex",flexDirection:"column",gap:12}}>
+  const getSurvivability = (w, a, e) => getSurvivabilityTotals(w, a, e);
 
-        {/* Slot counts */}
-        <div style={{display:"flex",gap:8}}>
-          {["Weapon","Accessory","Exclusive"].map(t=>(
-            <div key={t} style={{flex:1,padding:"8px 6px",background:counts[t]>0?typeColors[t].bg:C.surface,border:`1px solid ${counts[t]>0?typeColors[t].border:C.border}`,borderRadius:10,textAlign:"center"}}>
-              <div style={{fontSize:22,fontWeight:700,color:counts[t]>0?typeColors[t].text:C.textDim}}>{counts[t]}</div>
-              <div style={{fontSize:10,color:C.textDim,letterSpacing:1,marginTop:1}}>{t.toUpperCase()}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Build Info toggle */}
-        <div style={{background:C.surface,border:`1px solid #2a1a3a`,borderRadius:12,overflow:"hidden"}}>
-          <button onClick={()=>setShowBuildInfo(s=>!s)} style={{width:"100%",padding:"16px 18px",background:"transparent",border:"none",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer"}}>
-            <span style={{color:C.gold,fontSize:15,fontWeight:700,letterSpacing:1}}>ℹ BUILD INFO</span>
-            <span style={{color:C.textDim,fontSize:18}}>{showBuildInfo?"▲":"▼"}</span>
+  const renderComboPanel = (w, a, e, reqResult, isCurrent) => {
+    const stats = getStatTotals(w, a, e);
+    const surv = getSurvivability(w, a, e);
+    return (
+      <div style={{display:"flex", flexDirection:"column", gap:12}}>
+        {/* BUILD INFO collapsible */}
+        <div style={{background:C.surface, border:`1px solid #2a1a3a`, borderRadius:12, overflow:"hidden"}}>
+          <button onClick={() => setShowBuildInfo(s => !s)} style={{width:"100%", padding:"14px 16px", background:"transparent", border:"none", display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer"}}>
+            <span style={{color:C.gold, fontSize:14, fontWeight:700, letterSpacing:1}}>ℹ BUILD INFO</span>
+            <span style={{color:C.textDim, fontSize:16}}>{showBuildInfo ? "▲" : "▼"}</span>
           </button>
-          {showBuildInfo&&(
-            <div style={{padding:"0 16px 16px",display:"flex",flexDirection:"column",gap:16}}>
+          {showBuildInfo && (
+            <div style={{padding:"0 16px 16px", display:"flex", flexDirection:"column", gap:16}}>
 
-              {/* Threshold checks — always show config, show results if available */}
+              {/* Enhancement thresholds */}
+              {reqResult && (
+                <div>
+                  <p style={{color:C.textDim, margin:"0 0 10px", fontSize:11, letterSpacing:1.5}}>ENHANCEMENT THRESHOLDS</p>
+                  <div style={{display:"flex", flexDirection:"column", gap:8}}>
+                    {reqResult.checks.map(ch => (
+                      <div key={ch.key} style={{display:"flex", justifyContent:"space-between", fontSize:14}}>
+                        <span style={{color:ch.pass ? C.green : "#f87171"}}>{ch.pass ? "✓" : "✗"} {ch.label}</span>
+                        <span style={{color:ch.pass ? C.green : C.orange}}>
+                          {Math.round(ch.actual * 10) / 10}{ch.unit} / {ch.min}{ch.unit}
+                          {!ch.pass && <span style={{color:"#f87171"}}> (−{Math.round((ch.min - ch.actual) * 10) / 10}{ch.unit})</span>}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Damage stats */}
               <div>
-                <p style={{color:C.textDim,margin:"0 0 10px",fontSize:11,letterSpacing:1.5}}>ENHANCEMENT THRESHOLDS</p>
-                <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                  {result ? result.reqResult.checks.map(ch=>(
-                    <div key={ch.key} style={{display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:14}}>
-                      <span style={{color:ch.pass?C.green:"#f87171"}}>{ch.pass?"✓":"✗"} {ch.label}</span>
-                      <span style={{color:ch.pass?C.green:C.orange}}>
-                        {Math.round(ch.actual*10)/10}{ch.unit} / {ch.min}{ch.unit}
-                        {!ch.pass&&<span style={{color:"#f87171"}}> (−{Math.round((ch.min-ch.actual)*10)/10}{ch.unit})</span>}
-                      </span>
-                    </div>
-                  )) : [
-                    {key:"hss",label:"HSS",min:reqs.hss,unit:"%"},
-                    {key:"roe",label:"Rune Onslaught",min:reqs.roe,unit:"%"},
-                    {key:"hvf",label:"HVF",min:reqs.hvf,unit:"%"},
-                    {key:"rte",label:"Rolling Thunder",min:reqs.rte,unit:"%"},
-                    {key:"lde",label:"Lightning Domain",min:reqs.lde,unit:"m"},
-                  ].map(r=>(
-                    <div key={r.key} style={{display:"flex",justifyContent:"space-between",fontSize:14}}>
-                      <span style={{color:C.purpleLight}}>⚡ {r.label}</span>
-                      <span style={{color:C.textDim}}>≥ {r.min}{r.unit}</span>
+                <p style={{color:C.textDim, margin:"0 0 10px", fontSize:11, letterSpacing:1.5}}>DAMAGE STATS</p>
+                <div style={{display:"flex", flexDirection:"column", gap:8}}>
+                  {[
+                    {label:"Precision Rate",          value:`${stats.pr_total}%`},
+                    {label:"Precision Damage",         value:`${stats.pd_total}%`},
+                    {label:"Critical Hit Rate",        value:`${stats.cr_total}%`},
+                    {label:"Critical Damage",          value:`${stats.cd_total}%`},
+                    {label:"Total Output Boost",       value:`${stats.displayed_tob}%`},
+                    {label:"Total Damage Bonus",       value:`${stats.tdb}%`},
+                    {label:"Bonus Damage vs Bosses",   value:`${stats.boss}%`},
+                  ].filter(s => s.value !== "0%").map(s => (
+                    <div key={s.label} style={{display:"flex", justifyContent:"space-between", fontSize:14}}>
+                      <span style={{color:C.text}}>{s.label}</span>
+                      <span style={{color:C.gold}}>{s.value}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* Survivability — only after result */}
-              {result&&survivability.length>0&&(
+              {/* Survivability */}
+              {surv.length > 0 && (
                 <div>
-                  <p style={{color:C.textDim,margin:"0 0 10px",fontSize:11,letterSpacing:1.5}}>SURVIVABILITY (3 SLOTS, EXCL. ARMOR)</p>
-                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                    {survivability.map(s=>(
-                      <div key={s.label} style={{display:"flex",justifyContent:"space-between",fontSize:14}}>
+                  <p style={{color:C.textDim, margin:"0 0 10px", fontSize:11, letterSpacing:1.5}}>SURVIVABILITY (EXCL. ARMOR)</p>
+                  <div style={{display:"flex", flexDirection:"column", gap:8}}>
+                    {surv.map(s => (
+                      <div key={s.label} style={{display:"flex", justifyContent:"space-between", fontSize:14}}>
                         <span style={{color:C.text}}>{s.label}</span>
                         <span style={{color:C.gold}}>{s.total > 0 && !Number.isInteger(s.total) ? s.total.toFixed(1) : s.total}{s.unit}</span>
                       </div>
@@ -493,64 +513,243 @@ function OptimizeTab({result, runOptimize, counts}) {
           )}
         </div>
 
-        {/* Optimize button + result banner (side by side once result exists) */}
-        <div style={{display:"flex",gap:8,alignItems:"stretch"}}>
-          <button onClick={runOptimize} disabled={!hasAll} style={{flex:1,padding:"20px 0",background:hasAll?"#130f00":"#0a0a0a",border:`2px solid ${hasAll?C.gold:C.border}`,borderRadius:12,color:hasAll?C.gold:C.textDim,fontWeight:700,fontSize:17,letterSpacing:2.5,cursor:hasAll?"pointer":"not-allowed",fontFamily:"'Courier New',monospace"}}>
-            {hasAll?"⚡ FIND BUILD":"Add gear to all 3 slots first"}
-          </button>
-          {result&&(
-            <div style={{flex:1,padding:"0 10px",background:result.full?C.greenDim:"#2e1a00",border:`1px solid ${result.full?"#2a6a2a":"#6a3a00"}`,borderRadius:12,display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <span style={{color:result.full?C.green:C.orange,fontWeight:700,fontSize:14,textAlign:"center",lineHeight:1.3}}>
-                {result.full?"✓ OPTIMAL BUILD":"⚠ BEST AVAILABLE"}
-              </span>
-            </div>
-          )}
-        </div>
+        {/* Gear cards */}
+        {[w, a, e].map(p => <GearCard key={p.id} item={p} highlight={isCurrent} />)}
       </div>
+    );
+  };
 
-      {/* Scrollable results */}
-      <div style={{flex:1,overflowY:"auto",minHeight:0}}>
-        {!result?(
-          <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",color:C.textDim,textAlign:"center",padding:"0 20px"}}>
-            <div style={{fontSize:64,marginBottom:18}}>⚡</div>
-            <p style={{margin:"0 0 8px",fontSize:19,fontWeight:700,color:hasAll?C.text:C.textDim}}>{hasAll?"Tap the button above to find your optimal build":"Add gear to all 3 slots, then optimize"}</p>
+  return (
+    <div style={{display:"flex", flexDirection:"column", height:"100%", gap:12, minHeight:0}}>
+
+      {/* Fixed top */}
+      <div style={{flexShrink:0, display:"flex", flexDirection:"column", gap:10}}>
+
+        {/* Slot counts */}
+        <div style={{display:"flex", gap:10}}>
+          {["Weapon","Accessory","Exclusive"].map(t => (
+            <div key={t} style={{flex:1, padding:"14px 10px", background:counts[t]>0?typeColors[t].bg:C.surface, border:`1px solid ${counts[t]>0?typeColors[t].border:C.border}`, borderRadius:12, textAlign:"center"}}>
+              <div style={{fontSize:26, fontWeight:700, color:counts[t]>0?typeColors[t].text:C.textDim}}>{counts[t]}</div>
+              <div style={{fontSize:11, color:C.textDim, letterSpacing:1}}>{t.toUpperCase()}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Find optimal button */}
+        <button onClick={runOptimize} disabled={!hasAll} style={{width:"100%", padding:"14px 0", background:hasAll?"#130f00":"#0a0a0a", border:`2px solid ${hasAll?C.gold:C.border}`, borderRadius:12, color:hasAll?C.gold:C.textDim, fontWeight:700, fontSize:16, letterSpacing:2, cursor:hasAll?"pointer":"not-allowed", fontFamily:"'Courier New',monospace"}}>
+          {hasAll ? "⚡ FIND OPTIMAL BUILD" : "Add gear to all 3 slots first"}
+        </button>
+
+        {/* Result banner */}
+        {result && (
+          <div style={{padding:"12px 16px", borderRadius:12, background:result.full?C.greenDim:"#2e1a00", border:`1px solid ${result.full?"#2a6a2a":"#6a3a00"}`}}>
+            <span style={{color:result.full?C.green:C.orange, fontWeight:700, fontSize:16}}>
+              {result.full ? "✓ OPTIMAL BUILD" : "⚠ BEST AVAILABLE"}
+            </span>
           </div>
-        ):(
-          <div style={{display:"flex",flexDirection:"column",gap:12,paddingBottom:8}}>
-            <p style={{color:C.textDim,fontSize:12,letterSpacing:1.5,margin:"4px 0 0"}}>RECOMMENDED LOADOUT</p>
-            {[result.weapon,result.accessory,result.exclusive].map(p=><GearCard key={p.id} item={p} highlight/>)}
+        )}
+
+        {/* Tab strip */}
+        {(result || savedCombos.length > 0) && (
+          <div style={{display:"flex", border:`1px solid ${C.border}`, borderRadius:10, overflow:"hidden"}}>
+            <button onClick={() => setActiveTab("current")} style={{flex:1, padding:"11px 8px", background:activeTab==="current"?C.surface:"transparent", border:"none", borderBottom:`2px solid ${activeTab==="current"?C.gold:"transparent"}`, color:activeTab==="current"?C.gold:C.textDim, fontFamily:"'Courier New',monospace", fontSize:12, cursor:"pointer", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+              Current
+            </button>
+            {savedCombos.map(c => (
+              <button key={c.name} onClick={() => setActiveTab(c.name)} style={{flex:1, padding:"11px 8px", background:activeTab===c.name?C.surface:"transparent", border:"none", borderBottom:`2px solid ${activeTab===c.name?C.gold:"transparent"}`, borderLeft:`1px solid ${C.border}`, color:activeTab===c.name?C.gold:C.textDim, fontFamily:"'Courier New',monospace", fontSize:12, cursor:"pointer", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+                {c.name}
+              </button>
+            ))}
+            {result && (
+              <button onClick={() => {setSaveName(""); setShowSaveModal(true);}} style={{padding:"11px 14px", background:"transparent", border:"none", borderLeft:`1px solid ${C.border}`, color:C.textDim, cursor:"pointer", fontSize:18, flexShrink:0}}>
+                +
+              </button>
+            )}
           </div>
         )}
       </div>
+
+      {/* Scrollable content */}
+      <div style={{flex:1, overflowY:"auto", minHeight:0}}>
+        {!result && savedCombos.length === 0 ? (
+          <div style={{display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:"100%", color:C.textDim, textAlign:"center", padding:"0 20px"}}>
+            <div style={{fontSize:52, marginBottom:18}}>⚡</div>
+            <p style={{margin:0, fontSize:18, fontWeight:700, color:hasAll?C.text:C.textDim}}>
+              {hasAll ? "Tap the button above to find your optimal build" : "Add gear to all 3 slots, then optimize"}
+            </p>
+          </div>
+        ) : activeTab === "current" ? (
+          result ? renderComboPanel(result.weapon, result.accessory, result.exclusive, result.reqResult, true) : (
+            <div style={{textAlign:"center", padding:"40px 20px", color:C.textDim}}>
+              <p style={{fontSize:15}}>Run the optimizer to see your current build.</p>
+            </div>
+          )
+        ) : (
+          (() => {
+            const saved = savedCombos.find(c => c.name === activeTab);
+            if (!saved) return null;
+            const { weapon, accessory, exclusive } = getComboItems(saved);
+            return (
+              <div style={{display:"flex", flexDirection:"column", gap:12}}>
+                <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 14px", background:C.surface, border:`1px solid ${C.border}`, borderRadius:10}}>
+                  <span style={{color:C.textDim, fontSize:13}}>{saved.savedAt}</span>
+                  <button onClick={() => { deleteCombo(saved.name); setActiveTab("current"); }} style={{background:"transparent", border:"none", color:"#884444", cursor:"pointer", fontSize:13, fontFamily:"'Courier New',monospace", padding:"4px 8px"}}>✕ Delete</button>
+                </div>
+                {renderComboPanel(weapon, accessory, exclusive, null, false)}
+              </div>
+            );
+          })()
+        )}
+      </div>
+
+      {/* Save name modal */}
+      {showSaveModal && (
+        <div style={{position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"flex-end", zIndex:100}}>
+          <div style={{width:"100%", background:C.bg, borderTop:`2px solid ${C.border}`, borderRadius:"16px 16px 0 0", padding:"20px 16px 40px"}}>
+            <div style={{width:40, height:4, background:C.border, borderRadius:2, margin:"0 auto 16px"}}/>
+            <p style={{color:C.gold, fontSize:16, fontWeight:700, margin:"0 0 14px"}}>SAVE BUILD</p>
+            <input
+              value={saveName}
+              onChange={e => setSaveName(e.target.value)}
+              placeholder="e.g. Lv174 Clear, High TDB..."
+              autoFocus
+              style={{width:"100%", padding:"13px 14px", background:"#09090f", border:`1px solid ${C.border}`, borderRadius:10, color:C.text, fontSize:15, fontFamily:"'Courier New',monospace", boxSizing:"border-box", marginBottom:12, outline:"none"}}
+            />
+            <div style={{display:"flex", gap:10}}>
+              <button onClick={() => setShowSaveModal(false)} style={{flex:1, padding:"14px 0", background:"transparent", border:`1.5px solid ${C.border}`, borderRadius:10, color:C.textDim, fontWeight:700, fontSize:14, cursor:"pointer", fontFamily:"'Courier New',monospace"}}>Cancel</button>
+              <button
+                onClick={() => { if (saveName.trim()) { saveCombo(saveName.trim()); setActiveTab(saveName.trim()); setShowSaveModal(false); }}}
+                disabled={!saveName.trim()}
+                style={{flex:2, padding:"14px 0", background:saveName.trim()?C.greenDim:"#111", border:`1.5px solid ${saveName.trim()?C.green:"#333"}`, borderRadius:10, color:saveName.trim()?C.green:"#555", fontWeight:700, fontSize:14, cursor:saveName.trim()?"pointer":"not-allowed", fontFamily:"'Courier New',monospace"}}
+              >
+                💾 Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
+// ── Build Tab ─────────────────────────────────────────────────────────────────
+
+function BuildTab() {
+  const [reqs, setReqs] = useState(() => getReqs());
+  const [skills, setSkills] = useState(() => getSkills());
+  const [saved, setSaved] = useState(false);
+
+  const updateReq = (k, v) => setReqs(r => ({...r, [k]: parseFloat(v) || 0}));
+  const updateSkill = (k, v) => setSkills(s => ({...s, [k]: v}));
+
+  const saveAll = () => {
+    localStorage.setItem("bh:reqs", JSON.stringify(reqs));
+    localStorage.setItem("bh:skills", JSON.stringify(skills));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  };
+
+  return (
+    <div style={{display:"flex", flexDirection:"column", gap:14, paddingBottom:20, overflowY:"auto", height:"100%"}}>
+
+      {/* Enhancement Thresholds */}
+      <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:"18px"}}>
+        <h3 style={{color:C.gold, margin:"0 0 8px", fontSize:15, letterSpacing:1.5}}>ENHANCEMENT THRESHOLDS</h3>
+        <p style={{color:C.textDim, fontSize:13, margin:"0 0 16px", lineHeight:1.7}}>Minimum combined values across all 3 slots. Combos below these are shown as Best Available.</p>
+        <div style={{display:"flex", flexDirection:"column", gap:14}}>
+          {[
+            {key:"hss", label:"High-Speed Shock", unit:"%"},
+            {key:"roe", label:"Rune Onslaught", unit:"%"},
+            {key:"hvf", label:"High-Voltage Field", unit:"%"},
+            {key:"lde", label:"Lightning Domain", unit:"m"},
+          ].map(({key, label, unit}) => (
+            <div key={key} style={{display:"flex", alignItems:"center", gap:10}}>
+              <label style={{...lbl, marginBottom:0, flex:1, fontSize:13}}>{label}</label>
+              <div style={{display:"flex", alignItems:"center", gap:8}}>
+                <input type="number" value={reqs[key]} onChange={e => updateReq(key, e.target.value)}
+                  style={{...inp, width:95, textAlign:"right", padding:"11px 12px", fontSize:15}}/>
+                <span style={{color:C.textDim, fontSize:14, minWidth:18}}>{unit}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Skill Configuration */}
+      <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:"18px"}}>
+        <h3 style={{color:C.gold, margin:"0 0 8px", fontSize:15, letterSpacing:1.5}}>SKILL CONFIGURATION</h3>
+        <p style={{color:C.textDim, fontSize:13, margin:"0 0 16px", lineHeight:1.7}}>Enter your total skill tree contributions for each stat.</p>
+
+        {/* Number inputs */}
+        <div style={{display:"flex", flexDirection:"column", gap:14, marginBottom:16}}>
+          {[
+            {key:"cr",       label:"Critical Hit Rate from skills",        unit:"%"},
+            {key:"cd",       label:"Critical Damage from skills",          unit:"%"},
+            {key:"pr",       label:"Precision Rate from skills",           unit:"%"},
+            {key:"pd",       label:"Precision Damage from skills",         unit:"%"},
+            {key:"tdbSkill", label:"Total Damage Bonus from skills",       unit:"%"},
+          ].map(({key, label, unit}) => (
+            <div key={key} style={{display:"flex", alignItems:"center", gap:10}}>
+              <label style={{...lbl, marginBottom:0, flex:1, fontSize:13}}>{label}</label>
+              <div style={{display:"flex", alignItems:"center", gap:8}}>
+                <input type="number" value={skills[key]} onChange={e => updateSkill(key, parseFloat(e.target.value) || 0)}
+                  style={{...inp, width:95, textAlign:"right", padding:"11px 12px", fontSize:15}}/>
+                <span style={{color:C.textDim, fontSize:14, minWidth:18}}>{unit}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Damage Specialization toggle */}
+        <div style={{marginBottom:16}}>
+          <label style={{...lbl, fontSize:13, marginBottom:10}}>Damage Specialization</label>
+          <div style={{display:"flex", gap:8}}>
+            {[{val:2, label:"Precision Damage ×200%"}, {val:1.5, label:"Critical Damage ×150%"}].map(({val, label}) => (
+              <button key={val} onClick={() => updateSkill("pdMult", val)}
+                style={{flex:1, padding:"13px 0", background:skills.pdMult===val?"#130f00":"transparent", border:`2px solid ${skills.pdMult===val?C.gold:C.border}`, color:skills.pdMult===val?C.gold:C.textDim, borderRadius:10, cursor:"pointer", fontWeight:700, fontSize:12, fontFamily:"'Courier New',monospace"}}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Boss Fight Priority slider */}
+        <div style={{marginBottom:4}}>
+          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8}}>
+            <label style={{...lbl, marginBottom:0, fontSize:13}}>Boss Fight Priority</label>
+            <span style={{color:C.gold, fontSize:15, fontWeight:700}}>{skills.bossPriority}%</span>
+          </div>
+          <input type="range" min={0} max={100} step={5} value={skills.bossPriority}
+            onChange={e => updateSkill("bossPriority", parseInt(e.target.value))}
+            style={{width:"100%", accentColor:C.gold, cursor:"pointer"}}/>
+          <div style={{display:"flex", justifyContent:"space-between", marginTop:4}}>
+            <span style={{color:C.textDim, fontSize:11}}>Mob Clearing</span>
+            <span style={{color:C.textDim, fontSize:11}}>Boss Fight</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Save button */}
+      <button onClick={saveAll} style={{width:"100%", padding:"16px 0", background:saved?C.greenDim:"#130f00", border:`2px solid ${saved?C.green:C.gold}`, borderRadius:12, color:saved?C.green:C.gold, fontWeight:700, fontSize:15, letterSpacing:2, cursor:"pointer", fontFamily:"'Courier New',monospace"}}>
+        {saved ? "✓ SAVED" : "💾 SAVE BUILD CONFIG"}
+      </button>
+    </div>
+  );
+}
 
 // ── Settings Panel ────────────────────────────────────────────────────────────
 
-function SettingsPanel({onClose,itemCount}) {
+function SettingsPanel({onClose, itemCount}) {
   const [apiKey,setApiKey] = useState(()=>localStorage.getItem("bh:apiKey")||"");
   const [binKey,setBinKey] = useState(()=>process.env.REACT_APP_BIN_KEY||localStorage.getItem("bh:binKey")||"");
   const [binId,setBinId] = useState(()=>process.env.REACT_APP_BIN_ID||localStorage.getItem("bh:binId")||"");
-  const [reqs,setReqs] = useState(()=>getReqs());
-  const [skills,setSkills] = useState(()=>{
-    try{const s=localStorage.getItem("bh:skills");return s?{...DEFAULT_SKILLS,...JSON.parse(s)}:{...DEFAULT_SKILLS};}
-    catch{return{...DEFAULT_SKILLS};}
-  });
   const [apiSaved,setApiSaved] = useState(false);
   const [binKeySaved,setBinKeySaved] = useState(false);
-  const [reqsSaved,setReqsSaved] = useState(false);
-  const [skillsSaved,setSkillsSaved] = useState(false);
   const [cloudMsg,setCloudMsg] = useState("");
   const [cloudLoading,setCloudLoading] = useState(false);
 
   const saveApiKey = () => { localStorage.setItem("bh:apiKey",apiKey.trim()); setApiSaved(true); setTimeout(()=>setApiSaved(false),1500); };
   const saveBinKey = () => { localStorage.setItem("bh:binKey",binKey.trim()); setBinKeySaved(true); setTimeout(()=>setBinKeySaved(false),1500); };
-  const saveReqs   = () => { localStorage.setItem("bh:reqs",JSON.stringify(reqs)); setReqsSaved(true); setTimeout(()=>setReqsSaved(false),1500); };
-  const updateReq  = (k,v) => setReqs(r=>({...r,[k]:parseFloat(v)||0}));
-  const saveSkills = () => { localStorage.setItem("bh:skills",JSON.stringify(skills)); setSkillsSaved(true); setTimeout(()=>setSkillsSaved(false),1500); };
-  const updateSkill = (k,v) => setSkills(s=>({...s,[k]:parseFloat(v)||0}));
 
   const setupCloud = async () => {
     const activeKey=process.env.REACT_APP_BIN_KEY||localStorage.getItem("bh:binKey");
@@ -563,14 +762,6 @@ function SettingsPanel({onClose,itemCount}) {
     } catch(err) { setCloudMsg(`⚠ ${err.message}`); }
     finally { setCloudLoading(false); }
   };
-
-  const reqFields=[
-    {key:"hss",label:"HSS min combined",unit:"%"},
-    {key:"roe",label:"Rune Onslaught min combined",unit:"%"},
-    {key:"hvf",label:"HVF min combined",unit:"%"},
-    {key:"rte",label:"Rolling Thunder min combined",unit:"%"},
-    {key:"lde",label:"Lightning Domain min combined",unit:"m"},
-  ];
 
   return (
     <div style={{position:"fixed",inset:0,zIndex:100,display:"flex",flexDirection:"column"}}>
@@ -618,71 +809,6 @@ function SettingsPanel({onClose,itemCount}) {
             {cloudMsg&&<p style={{margin:"12px 0 0",fontSize:13,color:cloudMsg.startsWith("✓")?C.green:"#f87171"}}>{cloudMsg}</p>}
           </div>
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px"}}>
-            <h3 style={{color:C.gold,margin:"0 0 8px",fontSize:15,letterSpacing:1.5}}>SKILL CONFIGURATION</h3>
-            <p style={{color:C.textDim,fontSize:13,margin:"0 0 16px",lineHeight:1.7}}>Enter your total skill tree contributions for each stat.</p>
-            {[
-              {key:"cr",label:"Critical Hit Rate from skills",unit:"%"},
-              {key:"cd",label:"Critical Damage from skills",unit:"%"},
-              {key:"pr",label:"Precision Rate from skills",unit:"%"},
-              {key:"pd",label:"Precision Damage from skills (pre-multiplier)",unit:"%"},
-            ].map(({key,label,unit})=>(
-              <div key={key} style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-                <label style={{...lbl,marginBottom:0,flex:1,fontSize:13}}>{label}</label>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <input type="number" value={skills[key]} onChange={e=>updateSkill(key,e.target.value)} style={{...inp,width:95,textAlign:"right",padding:"11px 12px",fontSize:15}}/>
-                  <span style={{color:C.textDim,fontSize:14,minWidth:18}}>{unit}</span>
-                </div>
-              </div>
-            ))}
-            <div style={{marginBottom:14}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                <label style={{...lbl,marginBottom:0,fontSize:13}}>Boss Fight Priority</label>
-                <span style={{color:C.gold,fontSize:15,fontWeight:700}}>{skills.bossPriority}%</span>
-              </div>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={5}
-                value={skills.bossPriority}
-                onChange={e => updateSkill("bossPriority", parseInt(e.target.value))}
-                style={{width:"100%",accentColor:C.gold,cursor:"pointer"}}
-              />
-              <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
-                <span style={{color:C.textDim,fontSize:11}}>Mob Clearing</span>
-                <span style={{color:C.textDim,fontSize:11}}>Boss Fight</span>
-              </div>
-            </div>
-            <div style={{marginBottom:16}}>
-              <label style={{...lbl,fontSize:13,marginBottom:10}}>Damage Specialization</label>
-              <div style={{display:"flex",gap:8}}>
-                <button onClick={()=>updateSkill("pdMult",2)} style={{flex:1,padding:"13px 0",background:skills.pdMult===2?"#130f00":"transparent",border:`2px solid ${skills.pdMult===2?C.gold:C.border}`,color:skills.pdMult===2?C.gold:C.textDim,borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:13,fontFamily:"'Courier New',monospace"}}>PD ×200%</button>
-                <button onClick={()=>updateSkill("pdMult",1.5)} style={{flex:1,padding:"13px 0",background:skills.pdMult===1.5?"#130f00":"transparent",border:`2px solid ${skills.pdMult===1.5?C.gold:C.border}`,color:skills.pdMult===1.5?C.gold:C.textDim,borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:13,fontFamily:"'Courier New',monospace"}}>CD ×150%</button>
-              </div>
-            </div>
-            <button onClick={saveSkills} style={{width:"100%",padding:"14px 0",background:skillsSaved?C.greenDim:"#130f00",border:`1.5px solid ${skillsSaved?C.green:C.gold}`,borderRadius:10,color:skillsSaved?C.green:C.gold,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>
-              {skillsSaved?"✓ Saved":"💾 Save Skill Config"}
-            </button>
-          </div>
-          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px"}}>
-            <h3 style={{color:C.gold,margin:"0 0 8px",fontSize:17,letterSpacing:1.5}}>BUILD REQUIREMENTS</h3>
-            <p style={{color:C.textDim,fontSize:15,margin:"0 0 16px",lineHeight:1.7}}>Minimum combined enhancement values across all 3 slots.</p>
-            <div style={{display:"flex",flexDirection:"column",gap:14,marginBottom:16}}>
-              {reqFields.map(({key,label,unit})=>(
-                <div key={key} style={{display:"flex",alignItems:"center",gap:10}}>
-                  <label style={{...lbl,marginBottom:0,flex:1,fontSize:14}}>{label}</label>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <input type="number" value={reqs[key]} onChange={e=>updateReq(key,e.target.value)} style={{...inp,width:95,textAlign:"right",padding:"11px 12px",fontSize:15}}/>
-                    <span style={{color:C.textDim,fontSize:14,minWidth:18}}>{unit}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <button onClick={saveReqs} style={{width:"100%",padding:"16px 0",background:reqsSaved?C.greenDim:"#130f00",border:`1.5px solid ${reqsSaved?C.green:C.gold}`,borderRadius:10,color:reqsSaved?C.green:C.gold,fontWeight:700,fontSize:16,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>
-              {reqsSaved?"✓ Saved":"💾 Save Requirements"}
-            </button>
-          </div>
-          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px"}}>
             <h3 style={{color:C.gold,margin:"0 0 10px",fontSize:17,letterSpacing:1.5}}>ABOUT</h3>
             <p style={{color:C.textDim,fontSize:13,margin:0,lineHeight:1.8}}>Blood Hunt Gear Optimizer · Thor Rune Awakening · Precision Build<br/>v{APP_VERSION} · {itemCount} items in inventory</p>
           </div>
@@ -707,6 +833,9 @@ export default function App() {
   const [flash,setFlash] = useState(false);
   const [,setExportJson] = useState("");
   const [showSettings,setShowSettings] = useState(false);
+  const [savedCombos,setSavedCombos] = useState(() => {
+    try { const s=localStorage.getItem("bh:saved_combos"); return s?JSON.parse(s):[]; } catch { return []; }
+  });
 
   useEffect(()=>{
     try{const r=localStorage.getItem("bh:gear:v1");if(r)setItems(JSON.parse(r));}catch{}
@@ -714,6 +843,31 @@ export default function App() {
   },[]);
 
   const persist = next => { try{localStorage.setItem("bh:gear:v1",JSON.stringify(next));}catch{} };
+
+  const persistCombos = (next) => {
+    try { localStorage.setItem("bh:saved_combos", JSON.stringify(next)); } catch {}
+  };
+
+  const saveCombo = (name) => {
+    if (!optimResult) return;
+    const combo = {
+      v: COMBO_VERSION,
+      name,
+      savedAt: new Date().toLocaleDateString(),
+      w: compressItem(optimResult.weapon),
+      a: compressItem(optimResult.accessory),
+      e: compressItem(optimResult.exclusive),
+    };
+    const next = [...savedCombos.filter(c => c.name !== name), combo];
+    setSavedCombos(next);
+    persistCombos(next);
+  };
+
+  const deleteCombo = (name) => {
+    const next = savedCombos.filter(c => c.name !== name);
+    setSavedCombos(next);
+    persistCombos(next);
+  };
 
   const addItem = () => {
     if(!form.name.trim()||!form.rating) return;
@@ -750,10 +904,9 @@ export default function App() {
   );
 
   return (
-    // Full viewport — flex column — nothing overflows
     <div style={{height:"100dvh",display:"flex",flexDirection:"column",background:C.bg,color:C.text,fontFamily:"'Courier New',Courier,monospace",overflow:"hidden"}}>
 
-      {/* Header — fixed height */}
+      {/* Header */}
       <div style={{height:HEADER_H,flexShrink:0,background:"#07070e",borderBottom:`2px solid ${C.red}`,padding:"0 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div style={{minWidth:0,flex:1}}>
           <h1 style={{margin:0,fontSize:15,fontWeight:900,color:C.gold,letterSpacing:0.5,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>BLOOD HUNT ⚡ GEAR OPTIMIZER</h1>
@@ -762,19 +915,25 @@ export default function App() {
         <button onClick={()=>setShowSettings(true)} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.textDim,borderRadius:10,padding:"10px 12px",cursor:"pointer",fontSize:22,lineHeight:1,flexShrink:0}}>⚙</button>
       </div>
 
-      {/* Content — fills all space between header and nav */}
+      {/* Content */}
       <div style={{flex:1,overflow:"hidden",padding:"16px 16px 0",display:"flex",flexDirection:"column",minHeight:0}}>
         {tab==="add"&&<AddTab form={form} setForm={setForm} addItem={addItem} flash={flash} onBulkImport={bulkImport} items={items}/>}
         {tab==="inventory"&&<InventoryTab items={displayItems} allItems={items} filterType={filterType} setFilterType={setFilterType} deleteItem={deleteItem} counts={counts} onExport={setExportJson} onRestoreAll={restoreAll}/>}
-        {tab==="optimize"&&<OptimizeTab result={optimResult} runOptimize={runOptimize} counts={counts}/>}
+        {tab==="optimize"&&<OptimizeTab result={optimResult} runOptimize={runOptimize} counts={counts} savedCombos={savedCombos} saveCombo={saveCombo} deleteCombo={deleteCombo}/>}
+        {tab==="build"&&<BuildTab/>}
       </div>
 
-      {/* Bottom nav — fixed height */}
+      {/* Bottom nav */}
       <div style={{height:NAV_H,flexShrink:0,background:"#07070e",borderTop:`2px solid ${C.border}`,display:"flex",paddingBottom:"env(safe-area-inset-bottom)"}}>
-        {[["add","➕","ADD"],["inventory","📦","INVENTORY"],["optimize","⚡","OPTIMIZE"]].map(([id,icon,label])=>(
-          <button key={id} onClick={()=>setTab(id)} style={{flex:1,background:"transparent",border:"none",borderTop:`3px solid ${tab===id?C.gold:"transparent"}`,color:tab===id?C.gold:C.textDim,fontFamily:"'Courier New',monospace",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}>
-            <span style={{fontSize:26}}>{icon}</span>
-            <span style={{fontSize:12,letterSpacing:1}}>{label}</span>
+        {[
+          ["add","➕","ADD"],
+          ["inventory","📦","INVENTORY"],
+          ["optimize","⚡","OPTIMIZE"],
+          ["build","⚙","BUILD"]
+        ].map(([id,icon,label])=>(
+          <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"13px 4px 11px",background:"transparent",border:"none",borderTop:`3px solid ${tab===id?C.gold:"transparent"}`,color:tab===id?C.gold:C.textDim,fontFamily:"'Courier New',monospace",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+            <span style={{fontSize:22}}>{icon}</span>
+            <span style={{fontSize:10,letterSpacing:1}}>{label}</span>
           </button>
         ))}
       </div>

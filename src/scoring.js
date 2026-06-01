@@ -25,7 +25,7 @@ const SKILL_LDE          = 4.5;   // m LDE from 3/3 Lightning Domain trait
 const SKILL_TOB          = 278;   // % Total Output Boost: 117% base + 161% skills (no DR — skills exempt)
 
 // Read skill config from localStorage each call so Settings changes take effect without refresh
-function getSkills() {
+export function getSkills() {
   try {
     const saved = localStorage.getItem("bh:skills");
     return saved ? { ...DEFAULT_SKILLS, ...JSON.parse(saved) } : { ...DEFAULT_SKILLS };
@@ -71,7 +71,7 @@ export function comboEnhTotal(items, statName) {
 }
 
 // Get a stat value from a single item (returns 0 if not present)
-function itemStatValue(item, statName) {
+export function itemStatValue(item, statName) {
   for (const e of item.extendedEffects || []) {
     if (e.stat === statName) return parseEnhValue(e.value);
   }
@@ -168,7 +168,7 @@ export function scoreCombo(w, a, e) {
   const zap_damage  = proj_damage * (SKILL_HVF + hvf_gear) / 100 * HVF_COEFFICIENT;
   const zap_freq    = proj_freq * (SKILL_HSS + hss_gear) / 100;
   const boss_priority = skills.bossPriority / 100;
-  const tdb_factor  = 1 + (tdb_gear + boss_priority * boss_gear) / 100;
+  const tdb_factor  = 1 + (skills.tdbSkill + tdb_gear + boss_priority * boss_gear) / 100;
   const output      = displayed_tob / 100;
   const area        = Math.pow(SKILL_LDE + lde_gear, 1.5);
 
