@@ -43,12 +43,11 @@ function getSkills() {
 //   → displayed totals 686,709,722,754,774,775,793 (with weapon fixed at +443)
 //   → fitted A=452.3, k=371
 
-const TOB_A = 452.3;  // Asymptotic maximum contribution per item
-const TOB_K = 371;    // Half-saturation point (item hits 50% of max at this raw value)
+const TOB_COEFF = 11.5;  // Fitted from community spreadsheet formula
 
 function drTOB(rawItemTOB) {
   if (rawItemTOB <= 0) return 0;
-  return TOB_A * rawItemTOB / (rawItemTOB + TOB_K);
+  return TOB_COEFF * Math.sqrt(rawItemTOB);
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -137,6 +136,7 @@ export function scoreCombo(w, a, e) {
   const hss_gear = comboEnhTotal(combo, "High-Speed Shock Enhancement");
   const hvf_gear = comboEnhTotal(combo, "High-Voltage Field Enhancement");
   const lde_gear = comboEnhTotal(combo, "Lightning Domain Enhancement");
+  const tdb_gear = comboEnhTotal(combo, "Total Damage Bonus");
   const pr_gear  = comboEnhTotal(combo, "Precision Rate");
   const pd_gear  = comboEnhTotal(combo, "Precision Damage");
   const cr_gear  = comboEnhTotal(combo, "Critical Hit Rate");
@@ -158,18 +158,19 @@ export function scoreCombo(w, a, e) {
   const cr_total = (5 + skills.cr + BASE_CR_AMULET + cr_gear) / 100;
   const cd_total = (150 + skills.cd + cd_gear) * cdMult / 100;
   const expected_hit = pr_total * pd_total
-                     + (1 - pr_total) * cr_total * cd_total
-                     + (1 - pr_total) * (1 - cr_total) * 1;
+                     + cr_total * cd_total
+                     + (1 - pr_total - cr_total) * 1;
 
   // Shared mechanics
   const proj_damage = BASE_MB_PROJ_DAMAGE;
   const proj_freq   = 1 + (SKILL_ATTACK_SPEED + roe_gear) / 100;
   const zap_damage  = proj_damage * (SKILL_HVF + hvf_gear) / 100 * HVF_COEFFICIENT;
   const zap_freq    = proj_freq * (SKILL_HSS + hss_gear) / 100;
+  const tdb_factor  = 1 + tdb_gear / 100;
   const output      = displayed_tob / 100;
   const area        = Math.pow(SKILL_LDE + lde_gear, 1.5);
 
-  const field_DPS = zap_damage * zap_freq * expected_hit * output * area;
+  const field_DPS = zap_damage * zap_freq * expected_hit * tdb_factor * output * area;
 
   return Math.round(field_DPS * 100) / 100;
 }
