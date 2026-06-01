@@ -834,6 +834,45 @@ function SettingsPanel({onClose, itemCount}) {
   );
 }
 
+// ── Debug Overlay ────────────────────────────────────────────────────────────
+
+function DebugOverlay() {
+  const [logs, setLogs] = useState([]);
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    const orig = console.log.bind(console);
+    console.log = (...args) => {
+      orig(...args);
+      const line = args.map(a =>
+        a !== null && typeof a === "object" ? JSON.stringify(a, null, 1) : String(a)
+      ).join(" ");
+      setLogs(prev => [...prev.slice(-49), line]);
+    };
+    return () => { console.log = orig; };
+  }, []);
+
+  if (logs.length === 0) return null;
+
+  return (
+    <div style={{position:"fixed", bottom:82, right:8, zIndex:9999, maxWidth:"calc(100vw - 16px)", width:320}}>
+      <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4}}>
+        <button onClick={() => setVisible(v => !v)} style={{background:"#1a1a2e", border:"1px solid #444", color:"#4ade80", borderRadius:6, padding:"4px 10px", fontSize:12, fontFamily:"monospace", cursor:"pointer"}}>
+          🐛 {logs.length} logs {visible ? "▲" : "▼"}
+        </button>
+        <button onClick={() => setLogs([])} style={{background:"transparent", border:"1px solid #444", color:"#888", borderRadius:6, padding:"4px 8px", fontSize:11, fontFamily:"monospace", cursor:"pointer"}}>
+          Clear
+        </button>
+      </div>
+      {visible && (
+        <div style={{background:"rgba(5,5,15,0.96)", border:"1px solid #2a2a4a", borderRadius:8, padding:"8px 10px", maxHeight:240, overflowY:"auto", fontSize:11, fontFamily:"'Courier New',monospace", color:"#4ade80", lineHeight:1.6, wordBreak:"break-all"}}>
+          {logs.map((l, i) => <div key={i} style={{borderBottom:"1px solid #111", paddingBottom:3, marginBottom:3}}>{l}</div>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── App ───────────────────────────────────────────────────────────────────────
 
 const HEADER_H = 68;
@@ -955,6 +994,7 @@ export default function App() {
       </div>
 
       {showSettings&&<SettingsPanel onClose={()=>setShowSettings(false)} itemCount={items.length}/>}
+      <DebugOverlay />
     </div>
   );
 }
