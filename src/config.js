@@ -63,6 +63,14 @@ export const DEFAULT_REQS = {
   roe: 200,   // Rune Onslaught combined %
   hvf: 1000,  // High-Voltage Field combined %
   lde: 5.0,   // Lightning Domain combined m
+  // Damage stat thresholds — total values including base + skills + gear; 0 = disabled
+  pr_min:   0,
+  pd_min:   0,
+  cr_min:   0,
+  cd_min:   0,
+  tob_min:  0,
+  tdb_min:  0,
+  boss_min: 0,
 };
 
 // Default skill tree contributions (all configurable in Settings)
