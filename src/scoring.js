@@ -189,16 +189,50 @@ export function getReqs() {
 
 export function checkReqs(w, a, e, reqs) {
   const combo = [w, a, e];
+  const skills = getSkills();
+
+  // Enhancement totals
   const hss = comboEnhTotal(combo, "High-Speed Shock Enhancement");
   const roe = comboEnhTotal(combo, "Rune Onslaught Enhancement");
   const hvf = comboEnhTotal(combo, "High-Voltage Field Enhancement");
   const lde = comboEnhTotal(combo, "Lightning Domain Enhancement");
+
+  // Damage stat totals — matching scoreCombo and BUILD INFO display
+  const pr_gear   = comboEnhTotal(combo, "Precision Rate");
+  const pd_gear   = comboEnhTotal(combo, "Precision Damage");
+  const cr_gear   = comboEnhTotal(combo, "Critical Hit Rate");
+  const cd_gear   = comboEnhTotal(combo, "Critical Damage");
+  const tdb_gear  = comboEnhTotal(combo, "Total Damage Bonus");
+  const boss_gear = comboEnhTotal(combo, "Bonus Damage vs Bosses");
+  const w_tob = itemStatValue(w, "Total Output Boost");
+  const a_tob = itemStatValue(a, "Total Output Boost");
+  const e_tob = itemStatValue(e, "Total Output Boost");
+
+  const pdMult = skills.pdMult;
+  const cdMult = pdMult === 2 ? 1 : 1.5;
+
+  const pr_total   = Math.round((1 + skills.pr + pr_gear) * 10) / 10;
+  const pd_total   = Math.round((800 + skills.pd + pd_gear) * pdMult);
+  const cr_total   = Math.round((5 + skills.cr + BASE_CR_AMULET + cr_gear) * 10) / 10;
+  const cd_total   = Math.round((150 + skills.cd + cd_gear) * cdMult);
+  const tob_total  = Math.round(SKILL_TOB + 11.5 * Math.sqrt(w_tob) + 11.5 * Math.sqrt(a_tob) + 11.5 * Math.sqrt(e_tob));
+  const tdb_total  = tdb_gear;
+  const boss_total = boss_gear;
+
   const checks = [
     { key:"hss", label:"HSS",             actual:hss, min:reqs.hss, unit:"%", pass:hss>=reqs.hss },
     { key:"roe", label:"Rune Onslaught",  actual:roe, min:reqs.roe, unit:"%", pass:roe>=reqs.roe },
     { key:"hvf", label:"HVF",             actual:hvf, min:reqs.hvf, unit:"%", pass:hvf>=reqs.hvf },
     { key:"lde", label:"Lightning Domain",actual:lde, min:reqs.lde, unit:"m", pass:lde>=reqs.lde },
+    ...(reqs.pr_min   > 0 ? [{ key:"pr_min",   label:"Precision Rate",    actual:pr_total,   min:reqs.pr_min,   unit:"%", pass:pr_total>=reqs.pr_min   }] : []),
+    ...(reqs.pd_min   > 0 ? [{ key:"pd_min",   label:"Precision Damage",  actual:pd_total,   min:reqs.pd_min,   unit:"%", pass:pd_total>=reqs.pd_min   }] : []),
+    ...(reqs.cr_min   > 0 ? [{ key:"cr_min",   label:"Crit Hit Rate",     actual:cr_total,   min:reqs.cr_min,   unit:"%", pass:cr_total>=reqs.cr_min   }] : []),
+    ...(reqs.cd_min   > 0 ? [{ key:"cd_min",   label:"Crit Damage",       actual:cd_total,   min:reqs.cd_min,   unit:"%", pass:cd_total>=reqs.cd_min   }] : []),
+    ...(reqs.tob_min  > 0 ? [{ key:"tob_min",  label:"Output Boost",      actual:tob_total,  min:reqs.tob_min,  unit:"%", pass:tob_total>=reqs.tob_min }] : []),
+    ...(reqs.tdb_min  > 0 ? [{ key:"tdb_min",  label:"Damage Bonus",      actual:tdb_total,  min:reqs.tdb_min,  unit:"%", pass:tdb_total>=reqs.tdb_min }] : []),
+    ...(reqs.boss_min > 0 ? [{ key:"boss_min", label:"Boss Damage",       actual:boss_total, min:reqs.boss_min, unit:"%", pass:boss_total>=reqs.boss_min}] : []),
   ];
+
   return { pass: checks.every(c => c.pass), checks };
 }
 

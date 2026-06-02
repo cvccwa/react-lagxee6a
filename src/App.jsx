@@ -7,7 +7,7 @@ import {
 import { optimize, getReqs, checkReqs, getSkills, comboEnhTotal, itemStatValue } from "./scoring.js";
 import { jbCreate, jbRead, jbUpdate, fileToBase64, scanGearCard, compressItem, decompressItem } from "./api.js";
 
-const APP_VERSION = "1.2.2";
+const APP_VERSION = "1.2.3";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
@@ -685,6 +685,36 @@ function BuildTab({ onSave }) {
               <div style={{display:"flex", alignItems:"center", gap:8}}>
                 <input type="number" value={reqs[key]} onChange={e => updateReq(key, e.target.value)}
                   style={{...inp, width:95, textAlign:"right", padding:"11px 12px", fontSize:15}}/>
+                <span style={{color:C.textDim, fontSize:14, minWidth:18}}>{unit}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Damage Thresholds */}
+      <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:"18px"}}>
+        <h3 style={{color:C.gold, margin:"0 0 8px", fontSize:15, letterSpacing:1.5}}>DAMAGE THRESHOLDS</h3>
+        <p style={{color:C.textDim, fontSize:13, margin:"0 0 16px", lineHeight:1.7}}>Minimum total values (base + skills + gear) for damage stats. Set to 0 to disable.</p>
+        <div style={{display:"flex", flexDirection:"column", gap:14}}>
+          {[
+            {key:"pr_min",   label:"Precision Rate",         unit:"%"},
+            {key:"pd_min",   label:"Precision Damage",       unit:"%"},
+            {key:"cr_min",   label:"Critical Hit Rate",      unit:"%"},
+            {key:"cd_min",   label:"Critical Damage",        unit:"%"},
+            {key:"tob_min",  label:"Total Output Boost",     unit:"%"},
+            {key:"tdb_min",  label:"Total Damage Bonus",     unit:"%"},
+            {key:"boss_min", label:"Bonus Damage vs Bosses", unit:"%"},
+          ].map(({key, label, unit}) => (
+            <div key={key} style={{display:"flex", alignItems:"center", gap:10}}>
+              <label style={{...lbl, marginBottom:0, flex:1, fontSize:13}}>{label}</label>
+              <div style={{display:"flex", alignItems:"center", gap:8}}>
+                <input
+                  type="number"
+                  value={reqs[key] ?? 0}
+                  onChange={e => updateReq(key, e.target.value)}
+                  style={{...inp, width:95, textAlign:"right", padding:"11px 12px", fontSize:15}}
+                />
                 <span style={{color:C.textDim, fontSize:14, minWidth:18}}>{unit}</span>
               </div>
             </div>
