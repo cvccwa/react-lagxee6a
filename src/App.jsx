@@ -7,7 +7,7 @@ import {
 import { optimize, getReqs, checkReqs, getSkills, comboEnhTotal, itemStatValue } from "./scoring.js";
 import { jbCreate, jbRead, jbUpdate, fileToBase64, scanGearCard, compressItem, decompressItem } from "./api.js";
 
-const APP_VERSION = "1.2.3";
+const APP_VERSION = "1.2.4";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 

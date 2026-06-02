@@ -128,9 +128,9 @@ export function scoreItem(item) {
 //
 //   DPS = proj_damage × zap_damage × zap_freq × precision × output × area
 
-export function scoreCombo(w, a, e) {
+export function scoreCombo(w, a, e, skills = null) {
   const combo = [w, a, e];
-  const skills = getSkills();
+  const s = skills || getSkills();
 
   // Gear totals
   const roe_gear = comboEnhTotal(combo, "Rune Onslaught Enhancement");
@@ -151,14 +151,14 @@ export function scoreCombo(w, a, e) {
   const displayed_tob = SKILL_TOB + drTOB(w_tob) + drTOB(a_tob) + drTOB(e_tob);
 
   // Row 21 junction
-  const pdMult = skills.pdMult;
+  const pdMult = s.pdMult;
   const cdMult = pdMult === 2 ? 1 : 1.5;
 
   // Expected hit multiplier (precision checked first, then crit, then normal)
-  const pr_total = (1 + skills.pr + pr_gear) / 100;
-  const pd_total = (800 + skills.pd + pd_gear) * pdMult / 100;
-  const cr_total = (5 + skills.cr + BASE_CR_AMULET + cr_gear) / 100;
-  const cd_total = (150 + skills.cd + cd_gear) * cdMult / 100;
+  const pr_total = (1 + s.pr + pr_gear) / 100;
+  const pd_total = (800 + s.pd + pd_gear) * pdMult / 100;
+  const cr_total = (5 + s.cr + BASE_CR_AMULET + cr_gear) / 100;
+  const cd_total = (150 + s.cd + cd_gear) * cdMult / 100;
   const expected_hit = pr_total * pd_total
                      + cr_total * cd_total
                      + (1 - pr_total - cr_total) * 1;
@@ -168,8 +168,8 @@ export function scoreCombo(w, a, e) {
   const proj_freq   = 1 + (SKILL_ATTACK_SPEED + roe_gear) / 100;
   const zap_damage  = proj_damage * (SKILL_HVF + hvf_gear) / 100 * HVF_COEFFICIENT;
   const zap_freq    = proj_freq * (SKILL_HSS + hss_gear) / 100;
-  const boss_priority = skills.bossPriority / 100;
-  const tdb_factor  = 1 + (skills.tdbSkill + tdb_gear + boss_priority * boss_gear) / 100;
+  const boss_priority = s.bossPriority / 100;
+  const tdb_factor  = 1 + (s.tdbSkill + tdb_gear + boss_priority * boss_gear) / 100;
   const output      = displayed_tob / 100;
   const area        = Math.pow(SKILL_LDE + lde_gear, 1.5);
 
@@ -187,9 +187,9 @@ export function getReqs() {
   } catch { return { ...DEFAULT_REQS }; }
 }
 
-export function checkReqs(w, a, e, reqs) {
+export function checkReqs(w, a, e, reqs, skills = null) {
   const combo = [w, a, e];
-  const skills = getSkills();
+  const s = skills || getSkills();
 
   // Enhancement totals
   const hss = comboEnhTotal(combo, "High-Speed Shock Enhancement");
@@ -208,13 +208,13 @@ export function checkReqs(w, a, e, reqs) {
   const a_tob = itemStatValue(a, "Total Output Boost");
   const e_tob = itemStatValue(e, "Total Output Boost");
 
-  const pdMult = skills.pdMult;
+  const pdMult = s.pdMult;
   const cdMult = pdMult === 2 ? 1 : 1.5;
 
-  const pr_total   = Math.round((1 + skills.pr + pr_gear) * 10) / 10;
-  const pd_total   = Math.round((800 + skills.pd + pd_gear) * pdMult);
-  const cr_total   = Math.round((5 + skills.cr + BASE_CR_AMULET + cr_gear) * 10) / 10;
-  const cd_total   = Math.round((150 + skills.cd + cd_gear) * cdMult);
+  const pr_total   = Math.round((1 + s.pr + pr_gear) * 10) / 10;
+  const pd_total   = Math.round((800 + s.pd + pd_gear) * pdMult);
+  const cr_total   = Math.round((5 + s.cr + BASE_CR_AMULET + cr_gear) * 10) / 10;
+  const cd_total   = Math.round((150 + s.cd + cd_gear) * cdMult);
   const tob_total  = Math.round(SKILL_TOB + 11.5 * Math.sqrt(w_tob) + 11.5 * Math.sqrt(a_tob) + 11.5 * Math.sqrt(e_tob));
   const tdb_total  = tdb_gear;
   const boss_total = boss_gear;
@@ -251,6 +251,7 @@ export function optimize(weapons, accessories, exclusives) {
   if (!weapons.length || !accessories.length || !exclusives.length) return null;
 
   const reqs = getReqs();
+  const skills = getSkills();
   const TARGET = (1 << MANDATORY_ENH.length) - 1;
 
   // Pre-sort by display score for early pruning
@@ -265,8 +266,8 @@ export function optimize(weapons, accessories, exclusives) {
     for (const a of as) {
       for (const e of es) {
         const mask      = w._mask | a._mask | e._mask;
-        const score     = scoreCombo(w, a, e);
-        const reqResult = checkReqs(w, a, e, reqs);
+        const score     = scoreCombo(w, a, e, skills);
+        const reqResult = checkReqs(w, a, e, reqs, skills);
         const fullCov   = mask === TARGET;
 
         if (fullCov && reqResult.pass) {
