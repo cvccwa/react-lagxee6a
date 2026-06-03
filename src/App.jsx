@@ -5,8 +5,13 @@ import {
   C, typeColors, inp, sel, lbl, DEFAULT_SKILLS, COMBO_VERSION
 } from "./config.js";
 import { optimize, getReqs, checkReqs, getSkills, comboEnhTotal, itemStatValue } from "./scoring.js";
-import { fileToBase64, scanGearCard, compressItem, decompressItem } from "./api.js";
-import { supabase, sbLoadInventory, sbSaveInventory } from "./supabase.js";
+import {
+  fileToBase64, scanGearCard, compressItem, decompressItem,
+  fetchInventory, addInventoryItem, deleteInventoryItem, migrateInventoryToSupabase,
+  fetchSavedCombos, saveComboToSupabase, deleteComboFromSupabase,
+  fetchUserConfig, saveUserConfig,
+} from "./api.js";
+import { supabase } from "./supabase.js";
 
 const APP_VERSION = "1.3.0";
 
@@ -158,7 +163,7 @@ const blankForm = (type="Weapon")=>({type,name:"",rating:"",extendedEffects:Arra
 const STATUS_COLOR = {pending:"#7a7090",scanning:"#e8c84a",done:"#4ade80",error:"#f87171"};
 const STATUS_LABEL = {pending:"Queued",scanning:"⚡ Scanning…",done:"✓ Done",error:"✗ Error"};
 
-function AddTab({form,setForm,addItem,flash,onBulkImport,items,user,onSignIn}) {
+function AddTab({form,setForm,addItem,flash,onBulkImport,items,user,session,onSignIn}) {
   const [mode,setMode] = useState("scan");
   const [jsonText,setJsonText] = useState("");
   const [msg,setMsg] = useState({text:"",ok:true});
@@ -198,7 +203,7 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items,user,onSignIn}) {
       setPhotos(prev=>prev.map(p=>p.id===photo.id?{...p,status:"scanning"}:p));
       try {
         const b64=await fileToBase64(photo.file);
-        const result=await scanGearCard(b64,photo.file.type||"image/jpeg");
+        const result=await scanGearCard(b64,photo.file.type||"image/jpeg",session);
         setPhotos(prev=>prev.map(p=>p.id===photo.id?{...p,status:"done",result}:p));
       } catch(err) {
         setPhotos(prev=>prev.map(p=>p.id===photo.id?{...p,status:"error",error:err.message}:p));
@@ -364,8 +369,6 @@ function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts
   const [restoreMsg,setRestoreMsg] = useState({text:"",ok:true});
   const [exportText,setExportText] = useState("");
   const [showExport,setShowExport] = useState(false);
-  const [cloudMsg,setCloudMsg] = useState("");
-  const [cloudLoading,setCloudLoading] = useState("");
 
   const handleExport = () => {
     const clean=allItems.map(({_score,...rest})=>rest);
@@ -385,50 +388,15 @@ function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts
     } catch { setRestoreMsg({text:"⚠ Invalid JSON",ok:false}); }
   };
 
-  const loadFromCloud = async () => {
-    if (!user) return;
-    setCloudLoading("load"); setCloudMsg("");
-    try {
-      const data = await sbLoadInventory(user.id);
-      if (!Array.isArray(data)) throw new Error("Unexpected format");
-      onRestoreAll(data.filter(i=>i.type&&i.name&&i.rating));
-      setCloudMsg(`✓ Loaded ${data.length} items`);
-    } catch(err) { setCloudMsg(`⚠ ${err.message}`); }
-    finally { setCloudLoading(""); setTimeout(()=>setCloudMsg(""),3000); }
-  };
-
-  const saveToCloud = async () => {
-    if (!user) return;
-    setCloudLoading("save"); setCloudMsg("");
-    try {
-      const clean = allItems.map(({_score,...rest})=>rest);
-      await sbSaveInventory(user.id, clean);
-      setCloudMsg(`✓ Saved ${clean.length} items`);
-    } catch(err) { setCloudMsg(`⚠ ${err.message}`); }
-    finally { setCloudLoading(""); setTimeout(()=>setCloudMsg(""),3000); }
-  };
-
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100%",gap:8,minHeight:0}}>
-      {/* Cloud + backup — fixed */}
+      {/* Cloud status + backup — fixed */}
       <div style={{flexShrink:0,display:"flex",flexDirection:"column",gap:8}}>
         <div style={{background:"#0d0d1f",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 14px"}}>
-          <p style={{margin:"0 0 6px",color:C.gold,fontSize:14,fontWeight:700,letterSpacing:1}}>
-            ☁ CLOUD {user?<span style={{color:C.green,fontWeight:400}}>(connected)</span>:<span style={{color:"#f87171",fontWeight:400}}>(sign in to sync)</span>}
+          <p style={{margin:0,color:C.gold,fontSize:14,fontWeight:700,letterSpacing:1}}>
+            ☁ CLOUD {user?<span style={{color:C.green,fontWeight:400}}>(auto-sync on)</span>:<span style={{color:"#f87171",fontWeight:400}}>(sign in to sync)</span>}
           </p>
-          {user ? (
-            <div style={{display:"flex",gap:10}}>
-              <button onClick={loadFromCloud} disabled={!!cloudLoading} style={{flex:1,padding:"11px 0",background:cloudLoading==="load"?"#111":"#0d0d2e",border:`1.5px solid ${cloudLoading?"#333":"#7b68ee"}`,borderRadius:10,color:cloudLoading?"#555":"#a78bfa",fontWeight:700,fontSize:15,cursor:cloudLoading?"wait":"pointer",fontFamily:"'Courier New',monospace"}}>
-                {cloudLoading==="load"?"⏳ Loading…":"☁ Load"}
-              </button>
-              <button onClick={saveToCloud} disabled={!!cloudLoading} style={{flex:1,padding:"11px 0",background:cloudLoading==="save"?"#111":"#0d1a0a",border:`1.5px solid ${cloudLoading?"#333":C.green}`,borderRadius:10,color:cloudLoading?"#555":C.green,fontWeight:700,fontSize:15,cursor:cloudLoading?"not-allowed":"pointer",fontFamily:"'Courier New',monospace"}}>
-                {cloudLoading==="save"?"⏳ Saving…":"💾 Save"}
-              </button>
-            </div>
-          ) : (
-            <p style={{margin:"4px 0 0",color:C.textDim,fontSize:13,lineHeight:1.6}}>Sign in via ⚙ Settings to back up your inventory to the cloud.</p>
-          )}
-          {cloudMsg&&<p style={{margin:"8px 0 0",fontSize:14,color:cloudMsg.startsWith("✓")?C.green:"#f87171"}}>{cloudMsg}</p>}
+          {!user&&<p style={{margin:"4px 0 0",color:C.textDim,fontSize:13,lineHeight:1.6}}>Sign in via ⚙ Settings to back up your inventory to the cloud.</p>}
         </div>
 
         <div style={{background:"#0d0d1f",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 14px"}}>
@@ -740,7 +708,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
 
 // ── Build Tab ─────────────────────────────────────────────────────────────────
 
-function BuildTab() {
+function BuildTab({ onSave, optimResult, session }) {
   const [reqs, setReqs] = useState(() => getReqs());
   const [skills, setSkills] = useState(() => getSkills());
   const [saved, setSaved] = useState(false);
@@ -753,6 +721,12 @@ function BuildTab() {
     localStorage.setItem("bh:skills", JSON.stringify(skills));
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
+    if (onSave && optimResult) onSave();
+    if (session) {
+      saveUserConfig(skills, reqs).catch(err =>
+        console.error("[config] Failed to sync to Supabase:", err)
+      );
+    }
   };
 
   return (
@@ -875,7 +849,8 @@ function BuildTab() {
 
 // ── Settings Panel ────────────────────────────────────────────────────────────
 
-function SettingsPanel({onClose, itemCount, debugEnabled, setDebugEnabled, user, onSignOut, onSignIn}) {
+function SettingsPanel({onClose, itemCount, debugEnabled, setDebugEnabled, user, session, onSignOut, onSignIn,
+  keyStatus, keyInput, setKeyInput, keySaving, keySaved, saveApiKey, setScanProvider}) {
   return (
     <div style={{position:"fixed",inset:0,zIndex:100,display:"flex",flexDirection:"column"}}>
       <div onClick={onClose} style={{flex:1,background:"rgba(0,0,0,0.6)"}}/>
@@ -903,6 +878,67 @@ function SettingsPanel({onClose, itemCount, debugEnabled, setDebugEnabled, user,
               </div>
             )}
           </div>
+
+          {session && (
+            <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px"}}>
+              <h3 style={{color:C.gold,margin:"0 0 8px",fontSize:15,letterSpacing:1.5}}>SCAN PROVIDER</h3>
+              <p style={{color:C.textDim,fontSize:13,margin:"0 0 16px",lineHeight:1.7}}>
+                Your API key is encrypted and stored securely. It is never visible after saving.
+              </p>
+
+              <div style={{display:"flex",gap:8,marginBottom:16}}>
+                {[{key:"anthropic",label:"Anthropic"},{key:"gemini",label:"Gemini"}].map(({key,label})=>(
+                  <button key={key} onClick={()=>setScanProvider(key)}
+                    style={{flex:1,padding:"12px 0",
+                      background:keyStatus.scan_provider===key?"#130f00":"transparent",
+                      border:`2px solid ${keyStatus.scan_provider===key?C.gold:C.border}`,
+                      color:keyStatus.scan_provider===key?C.gold:C.textDim,
+                      borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:13,
+                      fontFamily:"'Courier New',monospace"}}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <div style={{marginBottom:12,padding:"10px 14px",background:"#0d0d1f",
+                border:`1px solid ${C.border}`,borderRadius:8,
+                display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{color:C.textDim,fontSize:13}}>
+                  {keyStatus.scan_provider==="anthropic"?"Anthropic":"Gemini"} Key
+                </span>
+                <span style={{
+                  color:(keyStatus.scan_provider==="anthropic"?keyStatus.anthropic_saved:keyStatus.gemini_saved)?C.green:C.orange,
+                  fontSize:13,fontWeight:700}}>
+                  {(keyStatus.scan_provider==="anthropic"?keyStatus.anthropic_saved:keyStatus.gemini_saved)?"✓ Saved":"Not configured"}
+                </span>
+              </div>
+
+              <input type="password" value={keyInput} onChange={e=>setKeyInput(e.target.value)}
+                placeholder={(keyStatus.scan_provider==="anthropic"?keyStatus.anthropic_saved:keyStatus.gemini_saved)
+                  ?"Enter new key to replace existing"
+                  :keyStatus.scan_provider==="anthropic"?"sk-ant-...":"AIza..."}
+                style={{...inp,width:"100%",boxSizing:"border-box",marginBottom:8}}/>
+
+              <p style={{color:C.textDim,fontSize:11,margin:"0 0 12px",lineHeight:1.6}}>
+                {keyStatus.scan_provider==="anthropic"
+                  ?"Get a key at console.anthropic.com"
+                  :"Get a free key at aistudio.google.com"}
+              </p>
+
+              <button onClick={saveApiKey} disabled={!keyInput.trim()||keySaving}
+                style={{width:"100%",padding:"13px 0",
+                  background:keySaved?C.greenDim:keyInput.trim()?"#130f00":"#0a0a0a",
+                  border:`1.5px solid ${keySaved?C.green:keyInput.trim()?C.gold:C.border}`,
+                  borderRadius:10,
+                  color:keySaved?C.green:keyInput.trim()?C.gold:C.textDim,
+                  fontWeight:700,fontSize:14,
+                  cursor:keyInput.trim()&&!keySaving?"pointer":"not-allowed",
+                  fontFamily:"'Courier New',monospace"}}>
+                {keySaved?"✓ Saved":keySaving?"Saving...":"💾 Save Key"}
+              </button>
+            </div>
+          )}
+
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px"}}>
             <h3 style={{color:C.gold,margin:"0 0 10px",fontSize:17,letterSpacing:1.5}}>ABOUT</h3>
             <p style={{color:C.textDim,fontSize:13,margin:0,lineHeight:1.8}}>Blood Hunt Gear Optimizer · Thor Rune Awakening · Precision Build<br/>v{APP_VERSION} · {itemCount} items in inventory</p>
@@ -985,20 +1021,37 @@ export default function App() {
     try { const s=localStorage.getItem("bh:saved_combos"); return s?JSON.parse(s):[]; } catch { return []; }
   });
   const [user,setUser] = useState(null);
+  const [session,setSession] = useState(null);
   const [authLoading,setAuthLoading] = useState(true);
   const [skipAuth,setSkipAuth] = useState(() => localStorage.getItem("bh:skipAuth") === "true");
+  const [keyStatus,setKeyStatus] = useState({gemini_saved:false,anthropic_saved:false,scan_provider:"anthropic"});
+  const [keyInput,setKeyInput] = useState("");
+  const [keySaving,setKeySaving] = useState(false);
+  const [keySaved,setKeySaved] = useState(false);
+  const [showMigrationPrompt,setShowMigrationPrompt] = useState(false);
+  const [migrating,setMigrating] = useState(false);
 
   useEffect(()=>{
+    // Remove legacy keys no longer used
+    localStorage.removeItem("bh:scanProvider");
+    localStorage.removeItem("bh:geminiKey");
+    localStorage.removeItem("bh:anthropicKey");
+    localStorage.removeItem("bh:apiKey");
+    localStorage.removeItem("bh:binId");
+    localStorage.removeItem("bh:binKey");
     try{const r=localStorage.getItem("bh:gear:v1");if(r)setItems(JSON.parse(r));}catch{}
     setLoading(false);
   },[]);
 
   useEffect(()=>{
     supabase.auth.getSession()
-      .then(({data:{session}})=>setUser(session?.user??null))
-      .catch(()=>setUser(null))
+      .then(({data:{session}})=>{setUser(session?.user??null);setSession(session??null);})
+      .catch(()=>{setUser(null);setSession(null);})
       .finally(()=>setAuthLoading(false));
-    const {data:{subscription}} = supabase.auth.onAuthStateChange((_,session)=>setUser(session?.user??null));
+    const {data:{subscription}} = supabase.auth.onAuthStateChange((_,session)=>{
+      setUser(session?.user??null);
+      setSession(session??null);
+    });
     return ()=>subscription.unsubscribe();
   },[]);
 
@@ -1008,7 +1061,153 @@ export default function App() {
     try { localStorage.setItem("bh:saved_combos", JSON.stringify(next)); } catch {}
   };
 
-  const saveCombo = (name) => {
+  // ── Supabase data loaders ───────────────────────────────────────────────────
+
+  const loadInventoryFromSupabase = async () => {
+    try {
+      const supabaseItems = await fetchInventory();
+      if (supabaseItems.length > 0) {
+        setItems(supabaseItems);
+        localStorage.setItem("bh:gear:v1", JSON.stringify(supabaseItems));
+      } else {
+        const localRaw = localStorage.getItem("bh:gear:v1");
+        const localItems = localRaw ? JSON.parse(localRaw) : [];
+        if (localItems.length > 0 && !localStorage.getItem("bh:migrated")) {
+          setShowMigrationPrompt(true);
+        }
+      }
+    } catch (err) {
+      console.error("[inventory] Failed to load from Supabase:", err);
+    }
+  };
+
+  const loadSavedCombosFromSupabase = async () => {
+    try {
+      const supabaseCombos = await fetchSavedCombos();
+      if (supabaseCombos.length > 0) {
+        setSavedCombos(supabaseCombos);
+        localStorage.setItem("bh:saved_combos", JSON.stringify(supabaseCombos));
+      } else {
+        const localCombos = JSON.parse(localStorage.getItem("bh:saved_combos") || "[]");
+        if (localCombos.length > 0 && !localStorage.getItem("bh:combos_migrated")) {
+          for (const combo of localCombos) {
+            await saveComboToSupabase(combo);
+          }
+          localStorage.setItem("bh:combos_migrated", "true");
+        }
+      }
+    } catch (err) {
+      console.error("[combos] Failed to load from Supabase:", err);
+    }
+  };
+
+  const loadConfigFromSupabase = async () => {
+    try {
+      const config = await fetchUserConfig();
+      if (config) {
+        if (config.skills && Object.keys(config.skills).length > 0) {
+          localStorage.setItem("bh:skills", JSON.stringify(config.skills));
+        }
+        if (config.reqs && Object.keys(config.reqs).length > 0) {
+          localStorage.setItem("bh:reqs", JSON.stringify(config.reqs));
+        }
+      } else {
+        const localSkills = JSON.parse(localStorage.getItem("bh:skills") || "{}");
+        const localReqs = JSON.parse(localStorage.getItem("bh:reqs") || "{}");
+        if (Object.keys(localSkills).length > 0 || Object.keys(localReqs).length > 0) {
+          await saveUserConfig(localSkills, localReqs);
+        }
+      }
+    } catch (err) {
+      console.error("[config] Failed to load from Supabase:", err);
+    }
+  };
+
+  const loadKeyStatus = async () => {
+    if (!session) return;
+    try {
+      const res = await fetch("/api/keys", {
+        method: "POST",
+        headers: {"Content-Type":"application/json","Authorization":`Bearer ${session.access_token}`},
+        body: JSON.stringify({action:"status"}),
+      });
+      const data = await res.json();
+      setKeyStatus(data);
+    } catch {}
+  };
+
+  // Load all user data when session becomes available
+  useEffect(()=>{
+    if (!session) return;
+    loadInventoryFromSupabase();
+    loadSavedCombosFromSupabase();
+    loadConfigFromSupabase();
+    loadKeyStatus();
+  },[session]); // session change triggers full data load
+
+  // ── Key management ──────────────────────────────────────────────────────────
+
+  const saveApiKey = async () => {
+    if (!keyInput.trim() || !session) return;
+    setKeySaving(true);
+    try {
+      const res = await fetch("/api/keys", {
+        method: "POST",
+        headers: {"Content-Type":"application/json","Authorization":`Bearer ${session.access_token}`},
+        body: JSON.stringify({action:"save",provider:keyStatus.scan_provider,key:keyInput.trim()}),
+      });
+      if (res.ok) {
+        setKeyStatus(prev=>({...prev,[`${keyStatus.scan_provider}_saved`]:true}));
+        setKeyInput("");
+        setKeySaved(true);
+        setTimeout(()=>setKeySaved(false),1500);
+      } else {
+        const err = await res.json();
+        alert("Failed to save key: " + err.error);
+      }
+    } catch (err) {
+      alert("Failed to save key: " + err.message);
+    } finally {
+      setKeySaving(false);
+    }
+  };
+
+  const setScanProvider = async (provider) => {
+    setKeyStatus(prev=>({...prev,scan_provider:provider}));
+    if (!session) return;
+    fetch("/api/keys", {
+      method: "POST",
+      headers: {"Content-Type":"application/json","Authorization":`Bearer ${session.access_token}`},
+      body: JSON.stringify({action:"set_provider",provider}),
+    }).catch(()=>{});
+  };
+
+  // ── Migration handlers ──────────────────────────────────────────────────────
+
+  const handleMigrate = async () => {
+    setMigrating(true);
+    try {
+      const localRaw = localStorage.getItem("bh:gear:v1");
+      const localItems = localRaw ? JSON.parse(localRaw) : [];
+      await migrateInventoryToSupabase(localItems);
+      localStorage.setItem("bh:migrated", "true");
+      setShowMigrationPrompt(false);
+      await loadInventoryFromSupabase();
+    } catch (err) {
+      alert("Migration failed: " + err.message);
+    } finally {
+      setMigrating(false);
+    }
+  };
+
+  const handleSkipMigration = () => {
+    localStorage.setItem("bh:migrated", "true");
+    setShowMigrationPrompt(false);
+  };
+
+  // ── Inventory handlers ──────────────────────────────────────────────────────
+
+  const saveCombo = async (name) => {
     if (!optimResult) return;
     const combo = {
       v: COMBO_VERSION,
@@ -1021,22 +1220,56 @@ export default function App() {
     const next = [...savedCombos.filter(c => c.name !== name), combo];
     setSavedCombos(next);
     persistCombos(next);
+    if (session) {
+      saveComboToSupabase(combo).catch(err =>
+        console.error("[combos] Failed to save to Supabase:", err)
+      );
+    }
   };
 
-  const deleteCombo = (name) => {
+  const deleteCombo = async (name) => {
     const next = savedCombos.filter(c => c.name !== name);
     setSavedCombos(next);
     persistCombos(next);
+    if (session) {
+      deleteComboFromSupabase(name).catch(err =>
+        console.error("[combos] Failed to delete from Supabase:", err)
+      );
+    }
   };
 
-  const addItem = () => {
+  const addItem = async () => {
     if(!form.name.trim()||!form.rating) return;
-    const item={id:`${Date.now()}${Math.random().toString(36).slice(2)}`,type:form.type,name:form.name.trim(),rating:+form.rating,extendedEffects:form.extendedEffects.filter(e=>e.stat)};
-    const {added}=dedupeAgainstExisting([item],items);
+    const newItem = {
+      type: form.type,
+      name: form.name.trim(),
+      rating: +form.rating,
+      extendedEffects: form.extendedEffects.filter(e=>e.stat),
+    };
+    const {added} = dedupeAgainstExisting([{...newItem, id:"temp"}], items);
     if (!added.length) return;
-    const next=[...items,...added]; setItems(next); persist(next);
-    setForm(blankForm(form.type)); setOptimResult(null);
+    setForm(blankForm(form.type));
+    setOptimResult(null);
     setFlash(true); setTimeout(()=>setFlash(false),1000);
+    if (session) {
+      try {
+        const savedItem = await addInventoryItem(newItem);
+        const newItems = [savedItem, ...items];
+        setItems(newItems);
+        localStorage.setItem("bh:gear:v1", JSON.stringify(newItems));
+      } catch (err) {
+        console.error("[inventory] Failed to add to Supabase:", err);
+        const localItem = {...newItem, id:`${Date.now()}${Math.random().toString(36).slice(2)}`};
+        const newItems = [localItem, ...items];
+        setItems(newItems);
+        persist(newItems);
+      }
+    } else {
+      const localItem = {...newItem, id:`${Date.now()}${Math.random().toString(36).slice(2)}`};
+      const newItems = [...items, localItem];
+      setItems(newItems);
+      persist(newItems);
+    }
   };
 
   const bulkImport = parsed => {
@@ -1049,7 +1282,18 @@ export default function App() {
     setItems(newItems); persist(newItems); setOptimResult(null);
   };
 
-  const deleteItem = id => { const next=items.filter(i=>i.id!==id); setItems(next); persist(next); setOptimResult(null); };
+  const deleteItem = async (id) => {
+    const newItems = items.filter(i => i.id !== id);
+    setItems(newItems);
+    localStorage.setItem("bh:gear:v1", JSON.stringify(newItems));
+    setOptimResult(null);
+    if (session) {
+      deleteInventoryItem(id).catch(err =>
+        console.error("[inventory] Failed to delete from Supabase:", err)
+      );
+    }
+  };
+
   const runOptimize = () => setOptimResult(optimize(
     items.filter(i=>i.type==="Weapon"),
     items.filter(i=>i.type==="Accessory"),
@@ -1096,10 +1340,10 @@ export default function App() {
 
       {/* Content */}
       <div style={{flex:1,overflow:"hidden",padding:"16px 16px 0",display:"flex",flexDirection:"column",minHeight:0}}>
-        {tab==="add"&&<AddTab form={form} setForm={setForm} addItem={addItem} flash={flash} onBulkImport={bulkImport} items={items} user={user} onSignIn={handleShowAuth}/>}
+        {tab==="add"&&<AddTab form={form} setForm={setForm} addItem={addItem} flash={flash} onBulkImport={bulkImport} items={items} user={user} session={session} onSignIn={handleShowAuth}/>}
         {tab==="inventory"&&<InventoryTab items={displayItems} allItems={items} filterType={filterType} setFilterType={setFilterType} deleteItem={deleteItem} counts={counts} onExport={setExportJson} onRestoreAll={restoreAll} user={user}/>}
         {tab==="optimize"&&<OptimizeTab result={optimResult} runOptimize={runOptimize} counts={counts} savedCombos={savedCombos} saveCombo={saveCombo} deleteCombo={deleteCombo}/>}
-        {tab==="build"&&<BuildTab/>}
+        {tab==="build"&&<BuildTab onSave={runOptimize} optimResult={optimResult} session={session}/>}
       </div>
 
       {/* Bottom nav */}
@@ -1117,8 +1361,34 @@ export default function App() {
         ))}
       </div>
 
-      {showSettings&&<SettingsPanel onClose={()=>setShowSettings(false)} itemCount={items.length} debugEnabled={debugEnabled} setDebugEnabled={setDebugEnabled} user={user} onSignOut={handleSignOut} onSignIn={handleShowAuth}/>}
+      {showSettings&&<SettingsPanel onClose={()=>setShowSettings(false)} itemCount={items.length} debugEnabled={debugEnabled} setDebugEnabled={setDebugEnabled} user={user} session={session} onSignOut={handleSignOut} onSignIn={handleShowAuth} keyStatus={keyStatus} keyInput={keyInput} setKeyInput={setKeyInput} keySaving={keySaving} keySaved={keySaved} saveApiKey={saveApiKey} setScanProvider={setScanProvider}/>}
       <DebugOverlay enabled={debugEnabled}/>
+
+      {showMigrationPrompt&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",display:"flex",alignItems:"flex-end",zIndex:200}}>
+          <div style={{width:"100%",background:C.bg,borderTop:`2px solid ${C.border}`,borderRadius:"16px 16px 0 0",padding:"24px 16px 40px"}}>
+            <div style={{width:40,height:4,background:C.border,borderRadius:2,margin:"0 auto 20px"}}/>
+            <div style={{fontSize:36,textAlign:"center",marginBottom:12}}>☁️</div>
+            <h3 style={{color:C.gold,fontSize:18,fontWeight:700,margin:"0 0 10px",textAlign:"center",fontFamily:"'Courier New',monospace"}}>
+              MIGRATE YOUR INVENTORY
+            </h3>
+            <p style={{color:C.textDim,fontSize:14,lineHeight:1.7,margin:"0 0 20px",textAlign:"center"}}>
+              You have local gear that isn't saved to your account yet.
+              Migrate it for cross-device access and automatic backup.
+            </p>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={handleSkipMigration}
+                style={{flex:1,padding:"14px 0",background:"transparent",border:`1.5px solid ${C.border}`,borderRadius:10,color:C.textDim,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>
+                Skip
+              </button>
+              <button onClick={handleMigrate} disabled={migrating}
+                style={{flex:2,padding:"14px 0",background:C.greenDim,border:`1.5px solid ${C.green}`,borderRadius:10,color:C.green,fontWeight:700,fontSize:14,cursor:migrating?"not-allowed":"pointer",fontFamily:"'Courier New',monospace"}}>
+                {migrating?"Migrating...":"☁️ Migrate Now"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
