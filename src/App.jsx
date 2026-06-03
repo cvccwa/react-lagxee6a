@@ -1072,20 +1072,8 @@ export default function App() {
     try {
       const supabaseItems = await fetchInventory();
       if (supabaseItems.length > 0) {
-        // Silently sync any local items that never made it to Supabase (e.g. from bulkImport)
-        const localRaw = localStorage.getItem("bh:gear:v1");
-        const localItems = localRaw ? JSON.parse(localRaw) : [];
-        const supabaseIds = new Set(supabaseItems.map(i => i.id));
-        const unsynced = localItems.filter(i => !supabaseIds.has(i.id));
-        if (unsynced.length > 0) {
-          await migrateInventoryToSupabase(unsynced);
-          const merged = await fetchInventory();
-          setItems(merged);
-          localStorage.setItem("bh:gear:v1", JSON.stringify(merged));
-        } else {
-          setItems(supabaseItems);
-          localStorage.setItem("bh:gear:v1", JSON.stringify(supabaseItems));
-        }
+        setItems(supabaseItems);
+        localStorage.setItem("bh:gear:v1", JSON.stringify(supabaseItems));
       } else {
         const localRaw = localStorage.getItem("bh:gear:v1");
         const localItems = localRaw ? JSON.parse(localRaw) : [];
