@@ -6,7 +6,7 @@
 create table inventory (
   id             uuid default gen_random_uuid() primary key,
   user_id        uuid references auth.users(id) on delete cascade not null,
-  type           text not null check (type in ('Weapon', 'Accessory', 'Exclusive', 'Armor')),
+  type           text not null check ("type" in ('Weapon', 'Accessory', 'Exclusive', 'Armor')),
   name           text not null,
   rating         integer not null,
   extended_effects jsonb not null default '[]',
