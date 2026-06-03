@@ -158,7 +158,7 @@ const blankForm = (type="Weapon")=>({type,name:"",rating:"",extendedEffects:Arra
 const STATUS_COLOR = {pending:"#7a7090",scanning:"#e8c84a",done:"#4ade80",error:"#f87171"};
 const STATUS_LABEL = {pending:"Queued",scanning:"⚡ Scanning…",done:"✓ Done",error:"✗ Error"};
 
-function AddTab({form,setForm,addItem,flash,onBulkImport,items}) {
+function AddTab({form,setForm,addItem,flash,onBulkImport,items,user,onSignIn}) {
   const [mode,setMode] = useState("scan");
   const [jsonText,setJsonText] = useState("");
   const [msg,setMsg] = useState({text:"",ok:true});
@@ -237,6 +237,14 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items}) {
 
       {/* ── SCAN MODE ── */}
       {mode==="scan"&&(
+        !user ? (
+          <div style={{display:"flex",flexDirection:"column",flex:1,alignItems:"center",justifyContent:"center",textAlign:"center",padding:"40px 20px",gap:16}}>
+            <div style={{fontSize:48}}>🔒</div>
+            <p style={{margin:0,color:C.text,fontSize:16,fontWeight:700}}>Account required for scanning</p>
+            <p style={{margin:0,color:C.textDim,fontSize:13,lineHeight:1.6}}>Create a free account to enable gear card scanning.</p>
+            <button onClick={onSignIn} style={{padding:"13px 28px",background:"#130f00",border:`2px solid ${C.gold}`,borderRadius:10,color:C.gold,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>⚡ Sign In / Create Account</button>
+          </div>
+        ) : (
         <div style={{display:"flex",flexDirection:"column",flex:1,gap:14,minHeight:0}}>
           <div style={{background:"#0d0d1f",border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 18px",flexShrink:0}}>
             <p style={{margin:"0 0 5px",color:C.gold,fontSize:17,fontWeight:700}}>📷 MULTI-PHOTO SCAN</p>
@@ -280,6 +288,7 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items}) {
           )}
           <input id="gear-photos" ref={fileRef} type="file" accept="image/*" multiple onChange={handleFileSelect} style={{display:"none"}}/>
         </div>
+        )
       )}
 
       {/* ── PASTE JSON MODE ── */}
@@ -1058,7 +1067,7 @@ export default function App() {
     setSkipAuth(true);
   };
 
-  const handleSignInFromSettings = () => {
+  const handleShowAuth = () => {
     localStorage.removeItem("bh:skipAuth");
     setSkipAuth(false);
     setShowSettings(false);
@@ -1087,7 +1096,7 @@ export default function App() {
 
       {/* Content */}
       <div style={{flex:1,overflow:"hidden",padding:"16px 16px 0",display:"flex",flexDirection:"column",minHeight:0}}>
-        {tab==="add"&&<AddTab form={form} setForm={setForm} addItem={addItem} flash={flash} onBulkImport={bulkImport} items={items}/>}
+        {tab==="add"&&<AddTab form={form} setForm={setForm} addItem={addItem} flash={flash} onBulkImport={bulkImport} items={items} user={user} onSignIn={handleShowAuth}/>}
         {tab==="inventory"&&<InventoryTab items={displayItems} allItems={items} filterType={filterType} setFilterType={setFilterType} deleteItem={deleteItem} counts={counts} onExport={setExportJson} onRestoreAll={restoreAll} user={user}/>}
         {tab==="optimize"&&<OptimizeTab result={optimResult} runOptimize={runOptimize} counts={counts} savedCombos={savedCombos} saveCombo={saveCombo} deleteCombo={deleteCombo}/>}
         {tab==="build"&&<BuildTab/>}
@@ -1108,7 +1117,7 @@ export default function App() {
         ))}
       </div>
 
-      {showSettings&&<SettingsPanel onClose={()=>setShowSettings(false)} itemCount={items.length} debugEnabled={debugEnabled} setDebugEnabled={setDebugEnabled} user={user} onSignOut={handleSignOut} onSignIn={handleSignInFromSettings}/>}
+      {showSettings&&<SettingsPanel onClose={()=>setShowSettings(false)} itemCount={items.length} debugEnabled={debugEnabled} setDebugEnabled={setDebugEnabled} user={user} onSignOut={handleSignOut} onSignIn={handleShowAuth}/>}
       <DebugOverlay enabled={debugEnabled}/>
     </div>
   );
