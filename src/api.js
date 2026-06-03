@@ -1,12 +1,7 @@
-// ── api.js ────────────────────────────────────────────────────────────────────
-// All external API calls: Anthropic (gear scanning) and JSONBin (cloud storage).
-// Sensitive parameters execute on the cloud layer to eliminate client visibility.
+import { STAT_ABBR, ABBR_STAT, TYPE_ABBR, ABBR_TYPE, TYPE_NAME, ABBR_UNIT } from "./config.js";
+import { supabase } from "./supabase.js";
 
-import { ALL_STATS, STAT_ABBR, ABBR_STAT, TYPE_ABBR, ABBR_TYPE, TYPE_NAME, ABBR_UNIT } from "./config.js";
-
-// ── JSONBin Cloud Inventory Sync ─────────────────────────────────────────────
-
-const JSONBIN_BASE = "https://api.jsonbin.io/v3/b";
+// ── Compression (saved combos) ────────────────────────────────────────────────
 
 export function compressItem(item) {
   const t = TYPE_ABBR[item.type] || item.type;
@@ -43,49 +38,7 @@ export function decompressItem(c) {
   };
 }
 
-// Fixed for Create React App system variables (package-lock.json architecture)
-const getJsonBinKey = () => process.env.REACT_APP_BIN_KEY || localStorage.getItem("bh:binKey") || "";
-
-export async function jbCreate(items) {
-  const r = await fetch(JSONBIN_BASE, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Master-Key": getJsonBinKey(),
-      "X-Bin-Name": "BloodHunt-GearInventory",
-      "X-Bin-Private": "false"
-    },
-    body: JSON.stringify(items.map(compressItem))
-  });
-  const d = await r.json();
-  if (!d.metadata?.id) throw new Error("Failed to create bin: " + JSON.stringify(d));
-  return d.metadata.id;
-}
-
-export async function jbRead(binId) {
-  const r = await fetch(`${JSONBIN_BASE}/${binId}/latest`, {
-    headers: { "X-Master-Key": getJsonBinKey() }
-  });
-  const d = await r.json();
-  if (!d.record) throw new Error("Failed to read bin");
-  // Handle both compressed (has "t" key) and legacy uncompressed format
-  return d.record.map(item => item.t !== undefined ? decompressItem(item) : item);
-}
-
-export async function jbUpdate(binId, items) {
-  const r = await fetch(`${JSONBIN_BASE}/${binId}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Master-Key": getJsonBinKey()
-    },
-    body: JSON.stringify(items.map(compressItem))
-  });
-  const d = await r.json();
-  if (!d.record) throw new Error("Failed to update bin");
-}
-
-// ── Anthropic Secure Serverless Gear Scanning ─────────────────────────────────
+// ── File utilities ────────────────────────────────────────────────────────────
 
 export async function fileToBase64(file) {
   return new Promise((res, rej) => {
@@ -96,49 +49,173 @@ export async function fileToBase64(file) {
   });
 }
 
-export async function scanGearCard(base64, mediaType) {
-  const statList = ALL_STATS.map(s => `"${s}"`).join(", ");
-  
-  // Routes traffic securely via your internal Vercel serverless backend proxy
+// ── Gear scanning (server handles prompt + key retrieval) ─────────────────────
+
+export async function scanGearCard(base64, mimeType, session) {
+  if (!session) throw new Error("Not authenticated");
+
   const res = await fetch("/api/scan", {
     method: "POST",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${session.access_token}`,
     },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1000,
-      messages: [{
-        role: "user",
-        content: [
-          { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
-          { type: "text", text:
-            `Read this Marvel Rivals Blood Hunt gear card. If two cards appear side by side, read ONLY the LEFT (selected) card. ` +
-            `Extract ONLY the EXTENDED EFFECT rows, NOT the BASE EFFECT. Return ONLY valid JSON, no markdown:\n` +
-            `{"type":"Weapon|Accessory|Exclusive","name":"gear name","rating":7018,"extendedEffects":[{"grade":"S","stat":"exact stat name","value":"+443%"}]}\n` +
-            `Stat names must exactly match one of: ${statList}`
-          }
-        ]
-      }]
-    })
+    body: JSON.stringify({ image: base64, mimeType }),
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || `Proxy serverless communication error ${res.status}`);
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || `Scan failed: ${res.status}`);
   }
+  return res.json();
+}
 
-  const data = await res.json();
-  const text = data.content?.find(b => b.type === "text")?.text || "";
-  const clean = text.replace(/```json|```/g, "").trim();
-  const parsed = JSON.parse(clean);
-  
-  // Restores your precise item object construction mapping safely
+// ── Inventory (Supabase) ──────────────────────────────────────────────────────
+
+export async function fetchInventory() {
+  const { data, error } = await supabase
+    .from("inventory")
+    .select("*")
+    .order("rating", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  return data.map(row => ({
+    id: row.id,
+    type: row.type,
+    name: row.name,
+    rating: row.rating,
+    extendedEffects: row.extended_effects,
+  }));
+}
+
+export async function addInventoryItem(item) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data, error } = await supabase
+    .from("inventory")
+    .insert({
+      user_id: user.id,
+      type: item.type,
+      name: item.name,
+      rating: item.rating,
+      extended_effects: item.extendedEffects,
+    })
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+
   return {
-    id: `${Date.now()}${Math.random().toString(36).slice(2)}`,
-    type: parsed.type,
-    name: parsed.name,
-    rating: +parsed.rating,
-    extendedEffects: (parsed.extendedEffects || []).filter(e => e.stat)
+    ...item,
+    id: data.id,
   };
+}
+
+export async function deleteInventoryItem(id) {
+  const { error } = await supabase
+    .from("inventory")
+    .delete()
+    .eq("id", id);
+
+  if (error) throw new Error(error.message);
+}
+
+export async function migrateInventoryToSupabase(items) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const rows = items.map(item => ({
+    user_id: user.id,
+    type: item.type,
+    name: item.name,
+    rating: item.rating,
+    extended_effects: item.extendedEffects,
+  }));
+
+  const BATCH_SIZE = 100;
+  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+    const batch = rows.slice(i, i + BATCH_SIZE);
+    const { error } = await supabase.from("inventory").insert(batch);
+    if (error) throw new Error(error.message);
+  }
+}
+
+// ── Saved combos (Supabase) ───────────────────────────────────────────────────
+
+export async function fetchSavedCombos() {
+  const { data, error } = await supabase
+    .from("saved_combos")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+
+  return data.map(row => ({
+    name: row.name,
+    savedAt: row.saved_at,
+    w: row.weapon,
+    a: row.accessory,
+    e: row.exclusive,
+  }));
+}
+
+export async function saveComboToSupabase(combo) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const { error } = await supabase
+    .from("saved_combos")
+    .upsert({
+      user_id: user.id,
+      name: combo.name,
+      saved_at: combo.savedAt,
+      weapon: combo.w,
+      accessory: combo.a,
+      exclusive: combo.e,
+    }, { onConflict: "user_id,name" });
+
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteComboFromSupabase(name) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const { error } = await supabase
+    .from("saved_combos")
+    .delete()
+    .eq("name", name)
+    .eq("user_id", user.id);
+
+  if (error) throw new Error(error.message);
+}
+
+// ── User config (Supabase) ────────────────────────────────────────────────────
+
+export async function fetchUserConfig() {
+  const { data, error } = await supabase
+    .from("user_config")
+    .select("skills, reqs")
+    .single();
+
+  if (error && error.code !== "PGRST116") throw new Error(error.message);
+  return data || null;
+}
+
+export async function saveUserConfig(skills, reqs) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const { error } = await supabase
+    .from("user_config")
+    .upsert({
+      user_id: user.id,
+      skills,
+      reqs,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id" });
+
+  if (error) throw new Error(error.message);
 }
