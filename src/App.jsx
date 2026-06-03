@@ -5,9 +5,10 @@ import {
   C, typeColors, inp, sel, lbl, DEFAULT_SKILLS, COMBO_VERSION
 } from "./config.js";
 import { optimize, getReqs, checkReqs, getSkills, comboEnhTotal, itemStatValue } from "./scoring.js";
-import { jbCreate, jbRead, jbUpdate, fileToBase64, scanGearCard, compressItem, decompressItem } from "./api.js";
+import { fileToBase64, scanGearCard, compressItem, decompressItem } from "./api.js";
+import { supabase, sbLoadInventory, sbSaveInventory } from "./supabase.js";
 
-const APP_VERSION = "1.2.4";
+const APP_VERSION = "1.3.0";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
@@ -67,6 +68,85 @@ function GearCard({item,onDelete,highlight}) {
           {onDelete&&<button onClick={()=>onDelete(item.id)} style={{marginTop:12,padding:"13px 20px",background:"transparent",border:"1px solid #3a1010",color:"#884444",borderRadius:8,cursor:"pointer",fontSize:15,fontFamily:"'Courier New',monospace"}}>✕ Remove</button>}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Auth Screen ───────────────────────────────────────────────────────────────
+
+function AuthScreen({ onSkip }) {
+  const [mode, setMode] = useState("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+
+  const handleSubmit = async () => {
+    if (!email.trim() || !password.trim()) return;
+    setLoading(true); setError(""); setInfo("");
+    try {
+      if (mode === "signin") {
+        const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.auth.signUp({ email: email.trim(), password });
+        if (error) throw error;
+        setInfo("Check your email to confirm your account, then sign in.");
+        setMode("signin");
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{height:"100dvh",background:C.bg,display:"flex",flexDirection:"column",fontFamily:"'Courier New',Courier,monospace"}}>
+      <div style={{height:68,flexShrink:0,background:"#07070e",borderBottom:`2px solid ${C.red}`,padding:"0 16px",display:"flex",alignItems:"center"}}>
+        <div>
+          <h1 style={{margin:0,fontSize:15,fontWeight:900,color:C.gold,letterSpacing:0.5,lineHeight:1.2}}>BLOOD HUNT ⚡ GEAR OPTIMIZER</h1>
+          <p style={{margin:0,fontSize:11,color:C.textDim}}>Thor · Rune Awakening · Precision Build</p>
+        </div>
+      </div>
+      <div style={{flex:1,display:"flex",flexDirection:"column",padding:"32px 20px",gap:20,overflowY:"auto"}}>
+        <div>
+          <h2 style={{margin:"0 0 6px",color:C.text,fontSize:22,fontWeight:700}}>{mode==="signin"?"Welcome back":"Create account"}</h2>
+          <p style={{margin:0,color:C.textDim,fontSize:14,lineHeight:1.6}}>Sign in to sync your gear inventory across devices.</p>
+        </div>
+        <div style={{display:"flex",border:`1px solid ${C.border}`,borderRadius:10,overflow:"hidden"}}>
+          {[["signin","Sign In"],["signup","Create Account"]].map(([id,label])=>(
+            <button key={id} onClick={()=>{setMode(id);setError("");setInfo("");}} style={{flex:1,padding:"14px 0",background:mode===id?C.surface:"transparent",border:"none",borderBottom:`2px solid ${mode===id?C.gold:"transparent"}`,color:mode===id?C.gold:C.textDim,fontFamily:"'Courier New',monospace",fontSize:14,cursor:"pointer"}}>{label}</button>
+          ))}
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <div>
+            <label style={{...lbl,fontSize:12,marginBottom:6}}>Email</label>
+            <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email" style={{...inp,fontSize:16,padding:"14px"}}/>
+          </div>
+          <div>
+            <label style={{...lbl,fontSize:12,marginBottom:6}}>Password</label>
+            <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" autoComplete={mode==="signin"?"current-password":"new-password"} onKeyDown={e=>e.key==="Enter"&&handleSubmit()} style={{...inp,fontSize:16,padding:"14px"}}/>
+          </div>
+        </div>
+        {error&&<p style={{margin:0,color:"#f87171",fontSize:14}}>{error}</p>}
+        {info&&<p style={{margin:0,color:C.green,fontSize:14}}>{info}</p>}
+        <button onClick={handleSubmit} disabled={loading||!email.trim()||!password.trim()} style={{width:"100%",padding:"18px 0",background:loading||!email.trim()||!password.trim()?"#0a0a0a":"#130f00",border:`2px solid ${loading||!email.trim()||!password.trim()?C.border:C.gold}`,borderRadius:12,color:loading||!email.trim()||!password.trim()?C.textDim:C.gold,fontWeight:700,fontSize:16,letterSpacing:1,cursor:loading||!email.trim()||!password.trim()?"not-allowed":"pointer",fontFamily:"'Courier New',monospace"}}>
+          {loading?"⏳ Please wait…":mode==="signin"?"⚡ SIGN IN":"⚡ CREATE ACCOUNT"}
+        </button>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <div style={{flex:1,height:1,background:C.border}}/>
+          <span style={{color:C.textDim,fontSize:13}}>or</span>
+          <div style={{flex:1,height:1,background:C.border}}/>
+        </div>
+        <button onClick={onSkip} style={{width:"100%",padding:"16px 0",background:"transparent",border:`1px solid ${C.border}`,borderRadius:12,color:C.textDim,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>
+          Continue without account
+        </button>
+        <p style={{margin:0,color:C.textDim,fontSize:12,textAlign:"center",lineHeight:1.6}}>
+          Your inventory is always saved locally on this device. Sign in to back up to the cloud.
+        </p>
+      </div>
     </div>
   );
 }
@@ -269,7 +349,7 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items}) {
 
 // ── Inventory Tab ─────────────────────────────────────────────────────────────
 
-function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts,onExport,onRestoreAll}) {
+function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts,onExport,onRestoreAll,user}) {
   const [restoreText,setRestoreText] = useState("");
   const [showRestore,setShowRestore] = useState(false);
   const [restoreMsg,setRestoreMsg] = useState({text:"",ok:true});
@@ -277,8 +357,6 @@ function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts
   const [showExport,setShowExport] = useState(false);
   const [cloudMsg,setCloudMsg] = useState("");
   const [cloudLoading,setCloudLoading] = useState("");
-
-  const getBinId = () => process.env.REACT_APP_BIN_ID || localStorage.getItem("bh:binId");
 
   const handleExport = () => {
     const clean=allItems.map(({_score,...rest})=>rest);
@@ -299,11 +377,10 @@ function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts
   };
 
   const loadFromCloud = async () => {
-    const binId=getBinId();
-    if (!binId){setCloudMsg("⚠ No cloud storage. Open Settings.");return;}
+    if (!user) return;
     setCloudLoading("load"); setCloudMsg("");
     try {
-      const data=await jbRead(binId);
+      const data = await sbLoadInventory(user.id);
       if (!Array.isArray(data)) throw new Error("Unexpected format");
       onRestoreAll(data.filter(i=>i.type&&i.name&&i.rating));
       setCloudMsg(`✓ Loaded ${data.length} items`);
@@ -312,12 +389,12 @@ function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts
   };
 
   const saveToCloud = async () => {
-    let binId=getBinId();
+    if (!user) return;
     setCloudLoading("save"); setCloudMsg("");
     try {
-      const clean=allItems.map(({_score,...rest})=>rest);
-      if (!binId){binId=await jbCreate(clean);localStorage.setItem("bh:binId",binId);setCloudMsg(`✓ Created & saved ${clean.length} items`);}
-      else {await jbUpdate(binId,clean);setCloudMsg(`✓ Saved ${clean.length} items`);}
+      const clean = allItems.map(({_score,...rest})=>rest);
+      await sbSaveInventory(user.id, clean);
+      setCloudMsg(`✓ Saved ${clean.length} items`);
     } catch(err) { setCloudMsg(`⚠ ${err.message}`); }
     finally { setCloudLoading(""); setTimeout(()=>setCloudMsg(""),3000); }
   };
@@ -328,16 +405,20 @@ function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts
       <div style={{flexShrink:0,display:"flex",flexDirection:"column",gap:8}}>
         <div style={{background:"#0d0d1f",border:`1px solid ${C.border}`,borderRadius:12,padding:"10px 14px"}}>
           <p style={{margin:"0 0 6px",color:C.gold,fontSize:14,fontWeight:700,letterSpacing:1}}>
-            ☁ CLOUD {getBinId()?<span style={{color:C.green,fontWeight:400}}>(connected)</span>:<span style={{color:"#f87171",fontWeight:400}}>(open Settings to connect)</span>}
+            ☁ CLOUD {user?<span style={{color:C.green,fontWeight:400}}>(connected)</span>:<span style={{color:"#f87171",fontWeight:400}}>(sign in to sync)</span>}
           </p>
-          <div style={{display:"flex",gap:10}}>
-            <button onClick={loadFromCloud} disabled={!!cloudLoading} style={{flex:1,padding:"11px 0",background:cloudLoading==="load"?"#111":"#0d0d2e",border:`1.5px solid ${cloudLoading?"#333":"#7b68ee"}`,borderRadius:10,color:cloudLoading?"#555":"#a78bfa",fontWeight:700,fontSize:15,cursor:cloudLoading?"wait":"pointer",fontFamily:"'Courier New',monospace"}}>
-              {cloudLoading==="load"?"⏳ Loading…":"☁ Load"}
-            </button>
-            <button onClick={saveToCloud} disabled={!!cloudLoading||items.length===0} style={{flex:1,padding:"11px 0",background:cloudLoading==="save"?"#111":"#0d1a0a",border:`1.5px solid ${cloudLoading||items.length===0?"#333":C.green}`,borderRadius:10,color:cloudLoading||items.length===0?"#555":C.green,fontWeight:700,fontSize:15,cursor:cloudLoading||items.length===0?"not-allowed":"pointer",fontFamily:"'Courier New',monospace"}}>
-              {cloudLoading==="save"?"⏳ Saving…":"💾 Save"}
-            </button>
-          </div>
+          {user ? (
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={loadFromCloud} disabled={!!cloudLoading} style={{flex:1,padding:"11px 0",background:cloudLoading==="load"?"#111":"#0d0d2e",border:`1.5px solid ${cloudLoading?"#333":"#7b68ee"}`,borderRadius:10,color:cloudLoading?"#555":"#a78bfa",fontWeight:700,fontSize:15,cursor:cloudLoading?"wait":"pointer",fontFamily:"'Courier New',monospace"}}>
+                {cloudLoading==="load"?"⏳ Loading…":"☁ Load"}
+              </button>
+              <button onClick={saveToCloud} disabled={!!cloudLoading||allItems.length===0} style={{flex:1,padding:"11px 0",background:cloudLoading==="save"?"#111":"#0d1a0a",border:`1.5px solid ${cloudLoading||allItems.length===0?"#333":C.green}`,borderRadius:10,color:cloudLoading||allItems.length===0?"#555":C.green,fontWeight:700,fontSize:15,cursor:cloudLoading||allItems.length===0?"not-allowed":"pointer",fontFamily:"'Courier New',monospace"}}>
+                {cloudLoading==="save"?"⏳ Saving…":"💾 Save"}
+              </button>
+            </div>
+          ) : (
+            <p style={{margin:"4px 0 0",color:C.textDim,fontSize:13,lineHeight:1.6}}>Sign in via ⚙ Settings to back up your inventory to the cloud.</p>
+          )}
           {cloudMsg&&<p style={{margin:"8px 0 0",fontSize:14,color:cloudMsg.startsWith("✓")?C.green:"#f87171"}}>{cloudMsg}</p>}
         </div>
 
@@ -785,30 +866,7 @@ function BuildTab() {
 
 // ── Settings Panel ────────────────────────────────────────────────────────────
 
-function SettingsPanel({onClose, itemCount, debugEnabled, setDebugEnabled}) {
-  const [apiKey,setApiKey] = useState(()=>localStorage.getItem("bh:apiKey")||"");
-  const [binKey,setBinKey] = useState(()=>process.env.REACT_APP_BIN_KEY||localStorage.getItem("bh:binKey")||"");
-  const [binId,setBinId] = useState(()=>process.env.REACT_APP_BIN_ID||localStorage.getItem("bh:binId")||"");
-  const [apiSaved,setApiSaved] = useState(false);
-  const [binKeySaved,setBinKeySaved] = useState(false);
-  const [cloudMsg,setCloudMsg] = useState("");
-  const [cloudLoading,setCloudLoading] = useState(false);
-
-  const saveApiKey = () => { localStorage.setItem("bh:apiKey",apiKey.trim()); setApiSaved(true); setTimeout(()=>setApiSaved(false),1500); };
-  const saveBinKey = () => { localStorage.setItem("bh:binKey",binKey.trim()); setBinKeySaved(true); setTimeout(()=>setBinKeySaved(false),1500); };
-
-  const setupCloud = async () => {
-    const activeKey=process.env.REACT_APP_BIN_KEY||localStorage.getItem("bh:binKey");
-    if (!activeKey){setCloudMsg("⚠ Save your JSONBin Master Key first.");return;}
-    setCloudLoading(true); setCloudMsg("");
-    try {
-      const id=await jbCreate([{"id":"init","name":"Seed Entry","rating":5500,"extendedEffects":[]}]);
-      localStorage.setItem("bh:binId",id); setBinId(id);
-      setCloudMsg("✓ Cloud storage created!");
-    } catch(err) { setCloudMsg(`⚠ ${err.message}`); }
-    finally { setCloudLoading(false); }
-  };
-
+function SettingsPanel({onClose, itemCount, debugEnabled, setDebugEnabled, user, onSignOut, onSignIn}) {
   return (
     <div style={{position:"fixed",inset:0,zIndex:100,display:"flex",flexDirection:"column"}}>
       <div onClick={onClose} style={{flex:1,background:"rgba(0,0,0,0.6)"}}/>
@@ -822,37 +880,19 @@ function SettingsPanel({onClose, itemCount, debugEnabled, setDebugEnabled}) {
         </div>
         <div style={{padding:"0 16px",display:"flex",flexDirection:"column",gap:14}}>
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px"}}>
-            <h3 style={{color:C.gold,margin:"0 0 8px",fontSize:17,letterSpacing:1.5}}>ANTHROPIC API KEY</h3>
-            <p style={{color:C.textDim,fontSize:15,margin:"0 0 14px",lineHeight:1.7}}>Required for 📷 Scan Photos. Get yours at console.anthropic.com → API Keys.</p>
-            <div style={{display:"flex",gap:10}}>
-              <input type="password" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="sk-ant-..." style={{...inp,flex:1,fontSize:15,padding:"13px 14px"}}/>
-              <button onClick={saveApiKey} style={{padding:"13px 18px",background:apiSaved?C.greenDim:"#130f00",border:`1.5px solid ${apiSaved?C.green:C.gold}`,borderRadius:10,color:apiSaved?C.green:C.gold,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace",whiteSpace:"nowrap"}}>{apiSaved?"✓":"Save"}</button>
-            </div>
-            {apiKey&&<p style={{margin:"10px 0 0",fontSize:13,color:C.green}}>✓ API key configured</p>}
-          </div>
-          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px"}}>
-            <h3 style={{color:C.gold,margin:"0 0 8px",fontSize:17,letterSpacing:1.5}}>CLOUD STORAGE (JSONBIN)</h3>
-            <p style={{color:C.textDim,fontSize:15,margin:"0 0 14px",lineHeight:1.7}}>Paste your JSONBin Master Key, then tap Setup.</p>
-            <label style={{...lbl,fontSize:14,marginBottom:8}}>JSONBin Master Key</label>
-            <div style={{display:"flex",gap:10,marginBottom:14}}>
-              <input type="password" value={binKey} onChange={e=>setBinKey(e.target.value)} placeholder="$2a$10$..." style={{...inp,flex:1,fontSize:15,padding:"13px 14px"}}/>
-              <button onClick={saveBinKey} style={{padding:"13px 18px",background:binKeySaved?C.greenDim:"#130f00",border:`1.5px solid ${binKeySaved?C.green:"#7b68ee"}`,borderRadius:10,color:binKeySaved?C.green:"#a78bfa",fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace",whiteSpace:"nowrap"}}>{binKeySaved?"✓":"Save"}</button>
-            </div>
-            <label style={{...lbl,fontSize:14,marginBottom:8}}>Active Bin ID</label>
-            <div style={{display:"flex",gap:10,marginBottom:14}}>
-              <input type="text" value={binId} onChange={e=>{const val=e.target.value.trim();setBinId(val);localStorage.setItem("bh:binId",val);}} placeholder="Enter Bin ID to link existing bin" style={{...inp,flex:1,fontSize:15,padding:"13px 14px"}}/>
-            </div>
-            {binId?(
+            <h3 style={{color:C.gold,margin:"0 0 10px",fontSize:17,letterSpacing:1.5}}>ACCOUNT</h3>
+            {user ? (
               <div>
-                <p style={{color:C.green,fontSize:13,margin:"0 0 12px"}}>✓ Connected — use Load/Save in Inventory.</p>
-                <button onClick={()=>{localStorage.removeItem("bh:binId");setBinId("");}} style={{padding:"12px 18px",background:"transparent",border:`1.5px solid #3a1010`,borderRadius:10,color:"#884444",fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>Disconnect</button>
+                <p style={{color:C.textDim,fontSize:13,margin:"0 0 4px"}}>Signed in as</p>
+                <p style={{color:C.text,fontSize:15,margin:"0 0 16px",fontWeight:600,wordBreak:"break-all"}}>{user.email}</p>
+                <button onClick={onSignOut} style={{padding:"13px 20px",background:"transparent",border:`1.5px solid #3a1010`,borderRadius:10,color:"#884444",fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>Sign Out</button>
               </div>
-            ):(
-              <button onClick={setupCloud} disabled={cloudLoading||!binKey.trim()} style={{width:"100%",padding:"16px 0",background:cloudLoading||!binKey.trim()?"#111":"#0d0d2e",border:`1.5px solid ${cloudLoading||!binKey.trim()?"#333":"#7b68ee"}`,borderRadius:10,color:cloudLoading||!binKey.trim()?"#555":"#a78bfa",fontWeight:700,fontSize:16,cursor:cloudLoading||!binKey.trim()?"not-allowed":"pointer",fontFamily:"'Courier New',monospace"}}>
-                {cloudLoading?"⏳ Setting up…":"☁ Setup Cloud Storage"}
-              </button>
+            ) : (
+              <div>
+                <p style={{color:C.textDim,fontSize:14,margin:"0 0 14px",lineHeight:1.7}}>Sign in to sync your inventory across devices. Your local data is preserved.</p>
+                <button onClick={onSignIn} style={{width:"100%",padding:"16px 0",background:"#130f00",border:`1.5px solid ${C.gold}`,borderRadius:10,color:C.gold,fontWeight:700,fontSize:15,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>⚡ Sign In / Create Account</button>
+              </div>
             )}
-            {cloudMsg&&<p style={{margin:"12px 0 0",fontSize:13,color:cloudMsg.startsWith("✓")?C.green:"#f87171"}}>{cloudMsg}</p>}
           </div>
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px"}}>
             <h3 style={{color:C.gold,margin:"0 0 10px",fontSize:17,letterSpacing:1.5}}>ABOUT</h3>
@@ -935,10 +975,22 @@ export default function App() {
   const [savedCombos,setSavedCombos] = useState(() => {
     try { const s=localStorage.getItem("bh:saved_combos"); return s?JSON.parse(s):[]; } catch { return []; }
   });
+  const [user,setUser] = useState(null);
+  const [authLoading,setAuthLoading] = useState(true);
+  const [skipAuth,setSkipAuth] = useState(() => localStorage.getItem("bh:skipAuth") === "true");
 
   useEffect(()=>{
     try{const r=localStorage.getItem("bh:gear:v1");if(r)setItems(JSON.parse(r));}catch{}
     setLoading(false);
+  },[]);
+
+  useEffect(()=>{
+    supabase.auth.getSession()
+      .then(({data:{session}})=>setUser(session?.user??null))
+      .catch(()=>setUser(null))
+      .finally(()=>setAuthLoading(false));
+    const {data:{subscription}} = supabase.auth.onAuthStateChange((_,session)=>setUser(session?.user??null));
+    return ()=>subscription.unsubscribe();
   },[]);
 
   const persist = next => { try{localStorage.setItem("bh:gear:v1",JSON.stringify(next));}catch{} };
@@ -995,12 +1047,31 @@ export default function App() {
     items.filter(i=>i.type==="Exclusive")
   ));
 
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    localStorage.removeItem("bh:skipAuth");
+    setSkipAuth(false);
+  };
+
+  const handleSkip = () => {
+    localStorage.setItem("bh:skipAuth","true");
+    setSkipAuth(true);
+  };
+
+  const handleSignInFromSettings = () => {
+    localStorage.removeItem("bh:skipAuth");
+    setSkipAuth(false);
+    setShowSettings(false);
+  };
+
   const counts={Weapon:items.filter(i=>i.type==="Weapon").length,Accessory:items.filter(i=>i.type==="Accessory").length,Exclusive:items.filter(i=>i.type==="Exclusive").length};
   const displayItems=(filterType==="All"?items:items.filter(i=>i.type===filterType)).slice().sort((a,b)=>b.rating-a.rating);
 
-  if(loading) return (
+  if(loading||authLoading) return (
     <div style={{height:"100dvh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",color:C.textDim,fontSize:16}}>Loading…</div>
   );
+
+  if(!user&&!skipAuth) return <AuthScreen onSkip={handleSkip}/>;
 
   return (
     <div style={{height:"100dvh",display:"flex",flexDirection:"column",background:C.bg,color:C.text,fontFamily:"'Courier New',Courier,monospace",overflow:"hidden"}}>
@@ -1017,7 +1088,7 @@ export default function App() {
       {/* Content */}
       <div style={{flex:1,overflow:"hidden",padding:"16px 16px 0",display:"flex",flexDirection:"column",minHeight:0}}>
         {tab==="add"&&<AddTab form={form} setForm={setForm} addItem={addItem} flash={flash} onBulkImport={bulkImport} items={items}/>}
-        {tab==="inventory"&&<InventoryTab items={displayItems} allItems={items} filterType={filterType} setFilterType={setFilterType} deleteItem={deleteItem} counts={counts} onExport={setExportJson} onRestoreAll={restoreAll}/>}
+        {tab==="inventory"&&<InventoryTab items={displayItems} allItems={items} filterType={filterType} setFilterType={setFilterType} deleteItem={deleteItem} counts={counts} onExport={setExportJson} onRestoreAll={restoreAll} user={user}/>}
         {tab==="optimize"&&<OptimizeTab result={optimResult} runOptimize={runOptimize} counts={counts} savedCombos={savedCombos} saveCombo={saveCombo} deleteCombo={deleteCombo}/>}
         {tab==="build"&&<BuildTab/>}
       </div>
@@ -1037,7 +1108,7 @@ export default function App() {
         ))}
       </div>
 
-      {showSettings&&<SettingsPanel onClose={()=>setShowSettings(false)} itemCount={items.length} debugEnabled={debugEnabled} setDebugEnabled={setDebugEnabled}/>}
+      {showSettings&&<SettingsPanel onClose={()=>setShowSettings(false)} itemCount={items.length} debugEnabled={debugEnabled} setDebugEnabled={setDebugEnabled} user={user} onSignOut={handleSignOut} onSignIn={handleSignInFromSettings}/>}
       <DebugOverlay enabled={debugEnabled}/>
     </div>
   );
