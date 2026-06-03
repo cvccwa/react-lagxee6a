@@ -1071,8 +1071,20 @@ export default function App() {
     try {
       const supabaseItems = await fetchInventory();
       if (supabaseItems.length > 0) {
-        setItems(supabaseItems);
-        localStorage.setItem("bh:gear:v1", JSON.stringify(supabaseItems));
+        // Silently sync any local items that never made it to Supabase (e.g. from bulkImport)
+        const localRaw = localStorage.getItem("bh:gear:v1");
+        const localItems = localRaw ? JSON.parse(localRaw) : [];
+        const supabaseIds = new Set(supabaseItems.map(i => i.id));
+        const unsynced = localItems.filter(i => !supabaseIds.has(i.id));
+        if (unsynced.length > 0) {
+          await migrateInventoryToSupabase(unsynced);
+          const merged = await fetchInventory();
+          setItems(merged);
+          localStorage.setItem("bh:gear:v1", JSON.stringify(merged));
+        } else {
+          setItems(supabaseItems);
+          localStorage.setItem("bh:gear:v1", JSON.stringify(supabaseItems));
+        }
       } else {
         const localRaw = localStorage.getItem("bh:gear:v1");
         const localItems = localRaw ? JSON.parse(localRaw) : [];
@@ -1276,9 +1288,23 @@ export default function App() {
     }
   };
 
-  const bulkImport = parsed => {
-    const newItems=parsed.map(i=>({id:i.id||`${Date.now()}${Math.random().toString(36).slice(2)}`,type:i.type,name:i.name,rating:+i.rating,extendedEffects:(i.extendedEffects||[]).filter(e=>e.stat)}));
-    const next=[...items,...newItems]; setItems(next); persist(next); setOptimResult(null);
+  const bulkImport = async (parsed) => {
+    const newItems = parsed.map(i => ({
+      type: i.type, name: i.name, rating: +i.rating,
+      extendedEffects: (i.extendedEffects||[]).filter(e=>e.stat),
+    }));
+    if (session) {
+      const withIds = await Promise.all(newItems.map(async item => {
+        try { return await addInventoryItem(item); }
+        catch { return {...item, id:`${Date.now()}${Math.random().toString(36).slice(2)}`}; }
+      }));
+      const next = [...items, ...withIds];
+      setItems(next); localStorage.setItem("bh:gear:v1", JSON.stringify(next));
+    } else {
+      const withIds = newItems.map(i => ({...i, id:`${Date.now()}${Math.random().toString(36).slice(2)}`}));
+      const next = [...items, ...withIds]; setItems(next); persist(next);
+    }
+    setOptimResult(null);
   };
 
   const restoreAll = parsed => {

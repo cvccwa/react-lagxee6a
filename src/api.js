@@ -90,9 +90,13 @@ export async function fetchInventory() {
 }
 
 export async function addInventoryItem(item) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
   const { data, error } = await supabase
     .from("inventory")
     .insert({
+      user_id: user.id,
       type: item.type,
       name: item.name,
       rating: item.rating,
@@ -119,7 +123,11 @@ export async function deleteInventoryItem(id) {
 }
 
 export async function migrateInventoryToSupabase(items) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
   const rows = items.map(item => ({
+    user_id: user.id,
     type: item.type,
     name: item.name,
     rating: item.rating,
