@@ -421,7 +421,7 @@ function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts
               <button onClick={loadFromCloud} disabled={!!cloudLoading} style={{flex:1,padding:"11px 0",background:cloudLoading==="load"?"#111":"#0d0d2e",border:`1.5px solid ${cloudLoading?"#333":"#7b68ee"}`,borderRadius:10,color:cloudLoading?"#555":"#a78bfa",fontWeight:700,fontSize:15,cursor:cloudLoading?"wait":"pointer",fontFamily:"'Courier New',monospace"}}>
                 {cloudLoading==="load"?"⏳ Loading…":"☁ Load"}
               </button>
-              <button onClick={saveToCloud} disabled={!!cloudLoading||allItems.length===0} style={{flex:1,padding:"11px 0",background:cloudLoading==="save"?"#111":"#0d1a0a",border:`1.5px solid ${cloudLoading||allItems.length===0?"#333":C.green}`,borderRadius:10,color:cloudLoading||allItems.length===0?"#555":C.green,fontWeight:700,fontSize:15,cursor:cloudLoading||allItems.length===0?"not-allowed":"pointer",fontFamily:"'Courier New',monospace"}}>
+              <button onClick={saveToCloud} disabled={!!cloudLoading} style={{flex:1,padding:"11px 0",background:cloudLoading==="save"?"#111":"#0d1a0a",border:`1.5px solid ${cloudLoading?"#333":C.green}`,borderRadius:10,color:cloudLoading?"#555":C.green,fontWeight:700,fontSize:15,cursor:cloudLoading?"not-allowed":"pointer",fontFamily:"'Courier New',monospace"}}>
                 {cloudLoading==="save"?"⏳ Saving…":"💾 Save"}
               </button>
             </div>
