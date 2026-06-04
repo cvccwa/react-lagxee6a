@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const supabaseAdmin = createClient(
   process.env.SUPABASE_URL,
@@ -17,35 +18,79 @@ const ALL_STATS = [
   "Healing Rune Charge Slots", "Block Damage Reduction",
 ];
 
-const VALID_TYPES = ["Weapon", "Accessory", "Exclusive", "Armor"];
-const VALID_GRADES = ["D", "C", "B", "A", "S"];
+const VALID_STATS = new Set(ALL_STATS);
+const VALID_TYPES = new Set(["Weapon", "Accessory", "Exclusive", "Armor"]);
+const VALID_GRADES = new Set(["S", "A", "B", "C", "D"]);
+
+const NAME_MAP = {
+  "GAEA SIGIL": "Gaea Sigil",
+  "ALCHEMY AMULET": "Alchemy Amulet",
+  "GOD TEMPEST'S WRATH": "God Tempest's Wrath",
+  "RUNIC ARMOR": "Runic Armor",
+};
 
 const SCAN_PROMPT =
-  `Read this Marvel Rivals Blood Hunt gear card. If two cards appear side by side, read ONLY the LEFT (selected) card. ` +
-  `Extract ONLY the EXTENDED EFFECT rows, NOT the BASE EFFECT. Return ONLY valid JSON, no markdown:\n` +
+  `Read this Marvel Rivals Blood Hunt gear card. ` +
+  `If two cards appear side by side, read ONLY the LEFT (selected) card. ` +
+  `Extract ONLY the EXTENDED EFFECT rows, NOT the BASE EFFECT. ` +
+  `Return ONLY valid JSON, no markdown:\n` +
   `{"type":"Weapon|Accessory|Exclusive","name":"gear name","rating":7018,"extendedEffects":[{"grade":"S","stat":"exact stat name","value":"+443%"}]}\n` +
   `Stat names must exactly match one of: ${ALL_STATS.map(s => `"${s}"`).join(", ")}`;
 
 function validateAndClean(parsed) {
   if (!parsed || typeof parsed !== "object") throw new Error("Invalid response from AI");
-  if (!VALID_TYPES.includes(parsed.type)) throw new Error(`Invalid type: ${parsed.type}`);
+  if (!VALID_TYPES.has(parsed.type)) throw new Error(`Invalid type: ${parsed.type}`);
   if (!parsed.name || typeof parsed.name !== "string") throw new Error("Missing gear name");
   const rating = +parsed.rating;
   if (isNaN(rating) || rating < 0) throw new Error("Invalid rating");
+
+  parsed.name = NAME_MAP[parsed.name.toUpperCase()] || parsed.name.trim();
+
+  const seen = new Set();
   const effects = (parsed.extendedEffects || [])
-    .filter(e => e.stat && ALL_STATS.includes(e.stat))
+    .filter(e => {
+      if (!e.stat || !VALID_STATS.has(e.stat)) return false;
+      if (!VALID_GRADES.has(e.grade)) return false;
+      if (!e.value) return false;
+      const num = parseFloat(String(e.value).replace(/[^0-9.-]/g, ""));
+      if (!isNaN(num) && num < 0) return false;
+      if (seen.has(e.stat)) return false;
+      seen.add(e.stat);
+      return true;
+    })
+    .slice(0, 5)
     .map(e => ({
-      grade: VALID_GRADES.includes(e.grade) ? e.grade : "S",
+      grade: e.grade,
       stat: e.stat,
-      value: String(e.value || ""),
+      value: String(e.value),
     }));
+
   return {
     id: `${Date.now()}${Math.random().toString(36).slice(2)}`,
     type: parsed.type,
-    name: parsed.name.trim(),
+    name: parsed.name,
     rating,
     extendedEffects: effects,
   };
+}
+
+async function scanWithGemini(image, mimeType, key) {
+  const genAI = new GoogleGenerativeAI(key);
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.5-flash",
+    generationConfig: {
+      temperature: 0.1,
+      thinkingConfig: { thinkingBudget: 0 },
+    },
+  });
+
+  const result = await model.generateContent([
+    SCAN_PROMPT,
+    { inlineData: { data: image, mimeType: mimeType || "image/jpeg" } },
+  ]);
+
+  const text = result.response.text();
+  return JSON.parse(text.replace(/```json|```/g, "").trim());
 }
 
 async function scanWithAnthropic(image, mimeType, key) {
@@ -75,8 +120,7 @@ async function scanWithAnthropic(image, mimeType, key) {
   }
 
   const text = data.content?.find(b => b.type === "text")?.text || "";
-  const clean = text.replace(/```json|```/g, "").trim();
-  return JSON.parse(clean);
+  return JSON.parse(text.replace(/```json|```/g, "").trim());
 }
 
 export default async function handler(req, res) {
@@ -94,17 +138,20 @@ export default async function handler(req, res) {
 
   const { data: keyStatus } = await supabaseAdmin
     .from("api_key_status")
-    .select("anthropic_saved")
+    .select("scan_provider, gemini_saved, anthropic_saved")
     .eq("user_id", user.id)
     .single();
 
-  if (!keyStatus?.anthropic_saved) {
+  const provider = keyStatus?.scan_provider || "anthropic";
+  const isSaved = provider === "gemini" ? keyStatus?.gemini_saved : keyStatus?.anthropic_saved;
+
+  if (!isSaved) {
     return res.status(400).json({
-      error: "No Anthropic API key configured. Please add your key in Settings.",
+      error: `No ${provider === "gemini" ? "Gemini" : "Anthropic"} API key configured. Please add your key in Settings.`,
     });
   }
 
-  const secretName = `api_key_anthropic_${user.id}`;
+  const secretName = `api_key_${provider}_${user.id}`;
   const { data: key, error: vaultError } = await supabaseAdmin
     .rpc("vault_read_secret", { p_name: secretName });
 
@@ -115,7 +162,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    let parsed = await scanWithAnthropic(image, mimeType || "image/jpeg", key);
+    let parsed;
+    if (provider === "gemini") {
+      parsed = await scanWithGemini(image, mimeType || "image/jpeg", key);
+    } else {
+      parsed = await scanWithAnthropic(image, mimeType || "image/jpeg", key);
+    }
     parsed = validateAndClean(parsed);
     return res.status(200).json(parsed);
   } catch (err) {
