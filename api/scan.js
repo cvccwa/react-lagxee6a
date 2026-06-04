@@ -36,7 +36,7 @@ const SCAN_PROMPT =
   `If two cards appear side by side, read ONLY the LEFT (selected) card. ` +
   `Extract ONLY the EXTENDED EFFECT rows, NOT the BASE EFFECT. ` +
   `Return ONLY valid JSON, no markdown:\n` +
-  `{"type":"Weapon|Accessory|Exclusive","name":"gear name","rating":7018,"extendedEffects":[{"grade":"S","stat":"exact stat name","value":"+443%"}]}\n` +
+  `{"type":"Weapon|Accessory|Exclusive|Armor","name":"gear name","rating":7018,"extendedEffects":[{"grade":"S","stat":"exact stat name","value":"+443%"}]}\n` +
   `Stat names must exactly match one of: ${ALL_STATS.map(s => `"${s}"`).join(", ")}`;
 
 function validateAndClean(parsed) {
