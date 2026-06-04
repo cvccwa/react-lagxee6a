@@ -52,6 +52,8 @@ function validateAndClean(parsed) {
       if (!e.stat || !VALID_STATS.has(e.stat)) return false;
       if (!VALID_GRADES.has(e.grade)) return false;
       if (!e.value) return false;
+      const num = parseFloat(String(e.value).replace(/[^0-9.-]/g, ""));
+      if (!isNaN(num) && num < 0) return false;
       if (seen.has(e.stat)) return false;
       seen.add(e.stat);
       return true;
