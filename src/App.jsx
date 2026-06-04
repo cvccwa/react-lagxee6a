@@ -13,7 +13,7 @@ import {
 } from "./api.js";
 import { supabase } from "./supabase.js";
 
-const APP_VERSION = "1.3.0";
+const APP_VERSION = "1.3.1";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
@@ -913,33 +913,29 @@ function SettingsPanel({onClose, itemCount, debugEnabled, setDebugEnabled, user,
                 </span>
               </div>
 
-              {keyStatus.scan_provider==="gemini" ? (
-                <div style={{padding:"14px",background:"#0d0d1f",border:`1px solid ${C.border}`,borderRadius:8,textAlign:"center"}}>
-                  <p style={{color:C.textDim,fontSize:13,margin:0,lineHeight:1.6}}>Gemini scanning not supported on this version.</p>
-                </div>
-              ) : (
-                <>
-                  <input type="password" value={keyInput} onChange={e=>setKeyInput(e.target.value)}
-                    placeholder={keyStatus.anthropic_saved?"Enter new key to replace existing":"sk-ant-..."}
-                    style={{...inp,width:"100%",boxSizing:"border-box",marginBottom:8}}/>
+              <input type="password" value={keyInput} onChange={e=>setKeyInput(e.target.value)}
+                placeholder={keyStatus.scan_provider==="gemini"
+                  ? (keyStatus.gemini_saved?"Enter new key to replace existing":"AIza...")
+                  : (keyStatus.anthropic_saved?"Enter new key to replace existing":"sk-ant-...")}
+                style={{...inp,width:"100%",boxSizing:"border-box",marginBottom:8}}/>
 
-                  <p style={{color:C.textDim,fontSize:11,margin:"0 0 12px",lineHeight:1.6}}>
-                    Get a key at console.anthropic.com
-                  </p>
+              <p style={{color:C.textDim,fontSize:11,margin:"0 0 12px",lineHeight:1.6}}>
+                {keyStatus.scan_provider==="gemini"
+                  ? "Get a free key at aistudio.google.com"
+                  : "Get a key at console.anthropic.com"}
+              </p>
 
-                  <button onClick={saveApiKey} disabled={!keyInput.trim()||keySaving}
-                    style={{width:"100%",padding:"13px 0",
-                      background:keySaved?C.greenDim:keyInput.trim()?"#130f00":"#0a0a0a",
-                      border:`1.5px solid ${keySaved?C.green:keyInput.trim()?C.gold:C.border}`,
-                      borderRadius:10,
-                      color:keySaved?C.green:keyInput.trim()?C.gold:C.textDim,
-                      fontWeight:700,fontSize:14,
-                      cursor:keyInput.trim()&&!keySaving?"pointer":"not-allowed",
-                      fontFamily:"'Courier New',monospace"}}>
-                    {keySaved?"✓ Saved":keySaving?"Saving...":"💾 Save Key"}
-                  </button>
-                </>
-              )}
+              <button onClick={saveApiKey} disabled={!keyInput.trim()||keySaving}
+                style={{width:"100%",padding:"13px 0",
+                  background:keySaved?C.greenDim:keyInput.trim()?"#130f00":"#0a0a0a",
+                  border:`1.5px solid ${keySaved?C.green:keyInput.trim()?C.gold:C.border}`,
+                  borderRadius:10,
+                  color:keySaved?C.green:keyInput.trim()?C.gold:C.textDim,
+                  fontWeight:700,fontSize:14,
+                  cursor:keyInput.trim()&&!keySaving?"pointer":"not-allowed",
+                  fontFamily:"'Courier New',monospace"}}>
+                {keySaved?"✓ Saved":keySaving?"Saving...":"💾 Save Key"}
+              </button>
             </div>
           )}
 

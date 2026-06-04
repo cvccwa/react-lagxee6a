@@ -2,6 +2,11 @@
 // All tunable constants and default values.
 // Change weights, thresholds, and stat lists here without touching other files.
 
+export const SCAN_PROVIDERS = {
+  gemini: "Gemini (Google AI Studio)",
+  anthropic: "Anthropic (Claude)",
+};
+
 export const ENHANCEMENTS = [
   "Lightning Domain Enhancement","High-Voltage Field Enhancement",
   "High-Speed Shock Enhancement","Rune Onslaught Enhancement",
