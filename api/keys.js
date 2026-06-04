@@ -41,7 +41,8 @@ export default async function handler(req, res) {
 
       return res.status(200).json({ success: true });
     } catch (err) {
-      return res.status(500).json({ error: err.message });
+      console.error("[keys] Error:", err.message);
+      return res.status(500).json({ error: "Request failed. Please try again." });
     }
   }
 
@@ -59,7 +60,8 @@ export default async function handler(req, res) {
         scan_provider: "anthropic",
       });
     } catch (err) {
-      return res.status(500).json({ error: err.message });
+      console.error("[keys] Error:", err.message);
+      return res.status(500).json({ error: "Request failed. Please try again." });
     }
   }
 
@@ -78,7 +80,8 @@ export default async function handler(req, res) {
 
       return res.status(200).json({ success: true });
     } catch (err) {
-      return res.status(500).json({ error: err.message });
+      console.error("[keys] Error:", err.message);
+      return res.status(500).json({ error: "Request failed. Please try again." });
     }
   }
 

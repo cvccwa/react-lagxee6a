@@ -1399,7 +1399,7 @@ export default function App() {
       </div>
 
       {showSettings&&<SettingsPanel onClose={()=>setShowSettings(false)} itemCount={items.length} debugEnabled={debugEnabled} setDebugEnabled={setDebugEnabled} user={user} session={session} onSignOut={handleSignOut} onSignIn={handleShowAuth} keyStatus={keyStatus} keyInput={keyInput} setKeyInput={setKeyInput} keySaving={keySaving} keySaved={keySaved} saveApiKey={saveApiKey} setScanProvider={setScanProvider}/>}
-      <DebugOverlay enabled={debugEnabled}/>
+      {process.env.NODE_ENV !== "production" && <DebugOverlay enabled={debugEnabled}/>}
 
       {showMigrationPrompt&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",display:"flex",alignItems:"flex-end",zIndex:200}}>
