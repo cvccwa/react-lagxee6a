@@ -1068,21 +1068,21 @@ export default function App() {
     try {
       const supabaseItems = await fetchInventory();
       if (supabaseItems.length > 0) {
-        // Silently sync any local items that never made it to Supabase (e.g. from bulkImport)
-        const localRaw = localStorage.getItem("bh:gear:v1");
-        const localItems = localRaw ? JSON.parse(localRaw) : [];
-        const supabaseIds = new Set(supabaseItems.map(i => i.id));
-        const unsynced = localItems.filter(i => !supabaseIds.has(i.id));
-        if (unsynced.length > 0) {
-          await migrateInventoryToSupabase(unsynced);
-          const merged = await fetchInventory();
-          setItems(merged);
-          localStorage.setItem("bh:gear:v1", JSON.stringify(merged));
-        } else {
-          setItems(supabaseItems);
-          localStorage.setItem("bh:gear:v1", JSON.stringify(supabaseItems));
+        // Sync items added while signed out, then merge with existing Supabase data
+        const pending = JSON.parse(localStorage.getItem("bh:pending") || "[]");
+        const failed = [], synced = [];
+        for (const item of pending) {
+          try { synced.push(await addInventoryItem(item)); }
+          catch { failed.push(item); }
         }
+        if (failed.length === 0) localStorage.removeItem("bh:pending");
+        else localStorage.setItem("bh:pending", JSON.stringify(failed));
+        const allItems = [...supabaseItems, ...synced];
+        setItems(allItems);
+        localStorage.setItem("bh:gear:v1", JSON.stringify(allItems));
       } else {
+        // New account — migration prompt covers all local items (including any pending)
+        localStorage.removeItem("bh:pending");
         const localRaw = localStorage.getItem("bh:gear:v1");
         const localItems = localRaw ? JSON.parse(localRaw) : [];
         if (localItems.length > 0 && !localStorage.getItem("bh:migrated")) {
@@ -1282,6 +1282,11 @@ export default function App() {
       const newItems = [...items, localItem];
       setItems(newItems);
       persist(newItems);
+      try {
+        const pending = JSON.parse(localStorage.getItem("bh:pending") || "[]");
+        pending.push(newItem);
+        localStorage.setItem("bh:pending", JSON.stringify(pending));
+      } catch {}
     }
   };
 
@@ -1300,6 +1305,11 @@ export default function App() {
     } else {
       const withIds = newItems.map(i => ({...i, id:`${Date.now()}${Math.random().toString(36).slice(2)}`}));
       const next = [...items, ...withIds]; setItems(next); persist(next);
+      try {
+        const pending = JSON.parse(localStorage.getItem("bh:pending") || "[]");
+        newItems.forEach(i => pending.push(i));
+        localStorage.setItem("bh:pending", JSON.stringify(pending));
+      } catch {}
     }
     setOptimResult(null);
   };
