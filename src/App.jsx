@@ -6,7 +6,8 @@ import {
 } from "recharts";
 import {
   ENHANCEMENTS, BASE_ATTRS, MANDATORY_ENH, GRADES, GRADE_COLOR,
-  C, typeColors, inp, sel, lbl, DEFAULT_SKILLS, COMBO_VERSION
+  C, typeColors, inp, sel, lbl, DEFAULT_SKILLS, COMBO_VERSION,
+  BASE_BLOCK_RATE_AMULET, THOR_BASE_HEALTH, RUNIC_ARMOR_BASE_HEALTH, RUNIC_ARMOR_BASE_ARMOR,
 } from "./config.js";
 import { optimize, getReqs, checkReqs, getSkills, comboEnhTotal, itemStatValue } from "./scoring.js";
 import {
@@ -17,7 +18,7 @@ import {
 } from "./api.js";
 import { supabase } from "./supabase.js";
 
-const APP_VERSION = "1.3.3";
+const APP_VERSION = "1.3.4";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
@@ -471,12 +472,13 @@ function getSurvivabilityTotals(weapon, accessory, exclusive, armor = null) {
   }).filter(s => s.total > 0);
 }
 
-const THOR_BASE_HEALTH = 2500; // verify in-game — stat screen with no gear/health skills
 const CURVE_SAMPLE_POINTS = [500, 1000, 2500, 5000, 10000, 15000, 20000];
 
 function getSurvivabilityStats(weapon, accessory, exclusive, armor) {
   const combo = [weapon, accessory, exclusive, armor].filter(Boolean);
-  const getTotal = (statName) => {
+  const skills = getSkills();
+
+  const getGearTotal = (statName) => {
     let total = 0;
     for (const item of combo) {
       for (const e of (item?.extendedEffects || [])) {
@@ -489,35 +491,44 @@ function getSurvivabilityStats(weapon, accessory, exclusive, armor) {
     return total;
   };
 
-  const flat_health    = getTotal("Health");
-  const pct_health     = getTotal("Percentage Health");
-  const armor_value    = getTotal("Armor");
-  const block_rate     = getTotal("Block Rate");
-  const block_dr       = getTotal("Block Damage Reduction");
-  const dodge_rate     = getTotal("Dodge Rate");
-  const rune_slots     = getTotal("Healing Rune Charge Slots");
-  const rune_cdr       = getTotal("Healing Rune Cooldown Reduction");
-  const respire        = getTotal("Health Restored Per/s (Restorative Respire)");
-  const health_on_kill = getTotal("Health Restored on Kill");
+  const gear_flat_health    = getGearTotal("Health");
+  const gear_pct_health     = getGearTotal("Percentage Health");
+  const gear_armor_value    = getGearTotal("Armor");
+  const gear_block_rate     = getGearTotal("Block Rate");
+  const gear_block_dr       = getGearTotal("Block Damage Reduction");
+  const gear_dodge_rate     = getGearTotal("Dodge Rate");
+  const gear_rune_slots     = getGearTotal("Healing Rune Charge Slots");
+  const gear_rune_cdr       = getGearTotal("Healing Rune Cooldown Reduction");
+  const gear_respire        = getGearTotal("Health Restored Per/s (Restorative Respire)");
+  const gear_health_on_kill = getGearTotal("Health Restored on Kill");
 
-  const total_health = (THOR_BASE_HEALTH + flat_health) * (1 + pct_health / 100);
-  const cdr_bonus = rune_cdr / 100;
-  const effective_charges = 3 + rune_slots + cdr_bonus;
+  const armor_base_health = armor ? RUNIC_ARMOR_BASE_HEALTH : 0;
+  const flat_health = THOR_BASE_HEALTH + skills.skillFlatHealth + gear_flat_health + armor_base_health;
+  const pct_multiplier = 1 + (skills.skillPctHealth + skills.skillPctDmgRes + gear_pct_health) / 100;
+  const total_health = flat_health * pct_multiplier;
+
+  const total_armor_value = gear_armor_value + (armor ? RUNIC_ARMOR_BASE_ARMOR : 0);
+  const total_block_rate  = gear_block_rate + skills.skillBlockRate + BASE_BLOCK_RATE_AMULET;
+  const total_block_dr    = gear_block_dr + skills.skillBlockDR;
+  const total_dodge_rate  = gear_dodge_rate + skills.skillDodgeRate;
+
+  const cdr_bonus = gear_rune_cdr / 100;
+  const effective_charges = 3 + gear_rune_slots + cdr_bonus;
   const rune_pool = total_health * 0.60 * effective_charges;
   const total_pool = total_health + rune_pool;
 
   return {
-    total_health, armor_value, block_rate, block_dr, dodge_rate,
-    effective_charges, rune_pool, total_pool, respire, health_on_kill,
+    total_health, total_armor_value, total_block_rate, total_block_dr, total_dodge_rate,
+    effective_charges, rune_pool, total_pool, gear_respire, gear_health_on_kill,
   };
 }
 
 function computeEffectiveHP(stats) {
-  const { total_pool, armor_value, block_rate, block_dr, dodge_rate } = stats;
+  const { total_pool, total_armor_value, total_block_rate, total_block_dr, total_dodge_rate } = stats;
   const damage_absorbed = CURVE_SAMPLE_POINTS.map(x => {
-    const after_armor = Math.max(1, x - armor_value);
-    const after_dodge = after_armor * (1 - dodge_rate / 100);
-    const block_reduction = (block_rate / 100) * block_dr;
+    const after_armor = Math.max(1, x - total_armor_value);
+    const after_dodge = after_armor * (1 - total_dodge_rate / 100);
+    const block_reduction = (total_block_rate / 100) * total_block_dr;
     const effective_hit = Math.max(1, after_dodge - block_reduction);
     return (total_pool / effective_hit) * x;
   });
@@ -583,13 +594,10 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
     return { pr_total, pd_total, cr_total, cd_total, displayed_tob, tdb, boss };
   };
 
-  const getSurvivability = (w, a, e) => getSurvivabilityTotals(w, a, e, equippedArmor);
-
   const renderComboPanel = (w, a, e, reqResult, isCurrent, savedCombo = null) => {
     const reqs = getReqs();
     const displayedReqResult = reqResult || checkReqs(w, a, e, reqs);
     const stats = getStatTotals(w, a, e);
-    const surv = getSurvivability(w, a, e);
     return (
       <div style={{display:"flex", flexDirection:"column", gap:12}}>
         {/* BUILD INFO collapsible */}
@@ -647,19 +655,32 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
               </div>
 
               {/* Survivability */}
-              {surv.length > 0 && (
-                <div>
-                  <p style={{color:C.textDim, margin:"0 0 10px", fontSize:11, letterSpacing:1.5}}>{equippedArmor ? "SURVIVABILITY (INCL. ARMOR)" : "SURVIVABILITY (EXCL. ARMOR)"}</p>
-                  <div style={{display:"flex", flexDirection:"column", gap:8}}>
-                    {surv.map(s => (
-                      <div key={s.label} style={{display:"flex", justifyContent:"space-between", fontSize:14}}>
-                        <span style={{color:C.text}}>{s.label}</span>
-                        <span style={{color:C.gold}}>{s.total > 0 && !Number.isInteger(s.total) ? s.total.toFixed(1) : s.total}{s.unit}</span>
-                      </div>
-                    ))}
+              {(() => {
+                const sv = getSurvivabilityStats(w, a, e, equippedArmor);
+                const statRows = [
+                  { label:"Total Health",         value: Math.round(sv.total_health).toLocaleString() },
+                  { label:"Armor Value",          value: sv.total_armor_value > 0 ? String(sv.total_armor_value) : null },
+                  { label:"Block Rate",           value: sv.total_block_rate > 0 ? `${Math.round(sv.total_block_rate * 10)/10}%` : null },
+                  { label:"Block Dmg Reduction",  value: sv.total_block_dr > 0 ? String(sv.total_block_dr) : null },
+                  { label:"Dodge Rate",           value: sv.total_dodge_rate > 0 ? `${sv.total_dodge_rate}%` : null },
+                  { label:"Rune Charges",         value: `${Math.round(sv.effective_charges * 10)/10}` },
+                  { label:"Health/s (Respire)",   value: sv.gear_respire > 0 ? String(sv.gear_respire) : null },
+                  { label:"Health on Kill",       value: sv.gear_health_on_kill > 0 ? String(sv.gear_health_on_kill) : null },
+                ].filter(r => r.value !== null);
+                return (
+                  <div>
+                    <p style={{color:C.textDim, margin:"0 0 10px", fontSize:11, letterSpacing:1.5}}>{equippedArmor ? "SURVIVABILITY (INCL. ARMOR)" : "SURVIVABILITY (EXCL. ARMOR)"}</p>
+                    <div style={{display:"flex", flexDirection:"column", gap:8}}>
+                      {statRows.map(r => (
+                        <div key={r.label} style={{display:"flex", justifyContent:"space-between", fontSize:13}}>
+                          <span style={{color:C.text}}>{r.label}</span>
+                          <span style={{color:C.gold}}>{r.value}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Effective HP + curve */}
               {(() => {
@@ -946,17 +967,17 @@ function BuildTab({ onSave, optimResult, session, equippedArmor, selectArmor, ar
 
       {/* Skill Configuration */}
       <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:"18px"}}>
-        <h3 style={{color:C.gold, margin:"0 0 8px", fontSize:15, letterSpacing:1.5}}>SKILL CONFIGURATION</h3>
-        <p style={{color:C.textDim, fontSize:13, margin:"0 0 16px", lineHeight:1.7}}>Enter your total skill tree contributions for each stat.</p>
+        <h3 style={{color:C.gold, margin:"0 0 16px", fontSize:15, letterSpacing:1.5}}>SKILL CONFIGURATION</h3>
 
-        {/* Number inputs */}
+        {/* DAMAGE sub-section */}
+        <p style={{color:C.textDim, fontSize:11, letterSpacing:1.5, margin:"0 0 12px"}}>DAMAGE</p>
         <div style={{display:"flex", flexDirection:"column", gap:14, marginBottom:16}}>
           {[
-            {key:"cr",       label:"Critical Hit Rate from skills",        unit:"%"},
-            {key:"cd",       label:"Critical Damage from skills",          unit:"%"},
-            {key:"pr",       label:"Precision Rate from skills",           unit:"%"},
-            {key:"pd",       label:"Precision Damage from skills",         unit:"%"},
-            {key:"tdbSkill", label:"Total Damage Bonus from skills",       unit:"%"},
+            {key:"cr",       label:"Critical Hit Rate",     unit:"%"},
+            {key:"cd",       label:"Critical Damage",       unit:"%"},
+            {key:"pr",       label:"Precision Rate",        unit:"%"},
+            {key:"pd",       label:"Precision Damage",      unit:"%"},
+            {key:"tdbSkill", label:"Total Damage Bonus",    unit:"%"},
           ].map(({key, label, unit}) => (
             <div key={key} style={{display:"flex", alignItems:"center", gap:10}}>
               <label style={{...lbl, marginBottom:0, flex:1, fontSize:13}}>{label}</label>
@@ -995,6 +1016,32 @@ function BuildTab({ onSave, optimResult, session, equippedArmor, selectArmor, ar
             <span style={{color:C.textDim, fontSize:11}}>Mob Clearing</span>
             <span style={{color:C.textDim, fontSize:11}}>Boss Fight</span>
           </div>
+        </div>
+
+        {/* Divider */}
+        <div style={{borderTop:`1px solid ${C.border}`, margin:"20px 0"}}/>
+
+        {/* SURVIVABILITY sub-section */}
+        <p style={{color:C.textDim, fontSize:11, letterSpacing:1.5, margin:"0 0 12px"}}>SURVIVABILITY</p>
+        <div style={{display:"flex", flexDirection:"column", gap:14}}>
+          {[
+            {key:"skillFlatHealth", label:"Flat Health",                  unit:""},
+            {key:"skillPctHealth",  label:"Percentage Max Health",        unit:"%"},
+            {key:"skillPctDmgRes",  label:"Percentage Damage Resistance", unit:"%"},
+            {key:"skillBlockRate",  label:"Block Rate",                   unit:"%"},
+            {key:"skillBlockDR",    label:"Block Damage Reduction",       unit:""},
+            {key:"skillDodgeRate",  label:"Dodge Rate",                   unit:"%"},
+          ].map(({key, label, unit}) => (
+            <div key={key} style={{display:"flex", alignItems:"center", gap:10}}>
+              <label style={{...lbl, marginBottom:0, flex:1, fontSize:13}}>{label}</label>
+              <div style={{display:"flex", alignItems:"center", gap:8}}>
+                <input type="number" value={skills[key] ?? 0}
+                  onChange={e => updateSkill(key, parseFloat(e.target.value) || 0)}
+                  style={{...inp, width:95, textAlign:"right", padding:"11px 12px", fontSize:15}}/>
+                <span style={{color:C.textDim, fontSize:14, minWidth:18}}>{unit}</span>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
