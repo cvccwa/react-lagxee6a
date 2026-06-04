@@ -1,6 +1,10 @@
 import './style.css';
 import { useState, useEffect, useRef } from "react";
 import {
+  LineChart, Line, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, CartesianGrid
+} from "recharts";
+import {
   ENHANCEMENTS, BASE_ATTRS, MANDATORY_ENH, GRADES, GRADE_COLOR,
   C, typeColors, inp, sel, lbl, DEFAULT_SKILLS, COMBO_VERSION
 } from "./config.js";
@@ -13,7 +17,7 @@ import {
 } from "./api.js";
 import { supabase } from "./supabase.js";
 
-const APP_VERSION = "1.3.2";
+const APP_VERSION = "1.3.3";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
@@ -467,8 +471,75 @@ function getSurvivabilityTotals(weapon, accessory, exclusive, armor = null) {
   }).filter(s => s.total > 0);
 }
 
+const THOR_BASE_HEALTH = 2500; // verify in-game — stat screen with no gear/health skills
+const CURVE_SAMPLE_POINTS = [500, 1000, 2500, 5000, 10000, 15000, 20000];
+
+function getSurvivabilityStats(weapon, accessory, exclusive, armor) {
+  const combo = [weapon, accessory, exclusive, armor].filter(Boolean);
+  const getTotal = (statName) => {
+    let total = 0;
+    for (const item of combo) {
+      for (const e of (item?.extendedEffects || [])) {
+        if (e.stat === statName) {
+          const n = parseFloat(String(e.value).replace(/[^0-9.-]/g, ""));
+          if (!isNaN(n)) total += n;
+        }
+      }
+    }
+    return total;
+  };
+
+  const flat_health    = getTotal("Health");
+  const pct_health     = getTotal("Percentage Health");
+  const armor_value    = getTotal("Armor");
+  const block_rate     = getTotal("Block Rate");
+  const block_dr       = getTotal("Block Damage Reduction");
+  const dodge_rate     = getTotal("Dodge Rate");
+  const rune_slots     = getTotal("Healing Rune Charge Slots");
+  const rune_cdr       = getTotal("Healing Rune Cooldown Reduction");
+  const respire        = getTotal("Health Restored Per/s (Restorative Respire)");
+  const health_on_kill = getTotal("Health Restored on Kill");
+
+  const total_health = (THOR_BASE_HEALTH + flat_health) * (1 + pct_health / 100);
+  const cdr_bonus = rune_cdr / 100;
+  const effective_charges = 3 + rune_slots + cdr_bonus;
+  const rune_pool = total_health * 0.60 * effective_charges;
+  const total_pool = total_health + rune_pool;
+
+  return {
+    total_health, armor_value, block_rate, block_dr, dodge_rate,
+    effective_charges, rune_pool, total_pool, respire, health_on_kill,
+  };
+}
+
+function computeEffectiveHP(stats) {
+  const { total_pool, armor_value, block_rate, block_dr, dodge_rate } = stats;
+  const damage_absorbed = CURVE_SAMPLE_POINTS.map(x => {
+    const after_armor = Math.max(1, x - armor_value);
+    const after_dodge = after_armor * (1 - dodge_rate / 100);
+    const block_reduction = (block_rate / 100) * block_dr;
+    const effective_hit = Math.max(1, after_dodge - block_reduction);
+    return (total_pool / effective_hit) * x;
+  });
+  const effective_hp = Math.min(
+    999999,
+    Math.round(damage_absorbed.reduce((a, b) => a + b, 0) / damage_absorbed.length)
+  );
+  return { effective_hp, damage_absorbed };
+}
+
+function getCurveData(stats) {
+  const { damage_absorbed } = computeEffectiveHP(stats);
+  return CURVE_SAMPLE_POINTS.map((x, i) => ({
+    hit: x.toLocaleString(),
+    hitRaw: x,
+    effectiveHP: Math.round(damage_absorbed[i]),
+  }));
+}
+
 function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, deleteCombo, equippedArmor}) {
   const [showBuildInfo, setShowBuildInfo] = useState(false);
+  const [showCurve, setShowCurve] = useState(false);
   const [activeTab, setActiveTab] = useState("current");
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -589,6 +660,73 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
                   </div>
                 </div>
               )}
+
+              {/* Effective HP + curve */}
+              {(() => {
+                const survStats = getSurvivabilityStats(w, a, e, equippedArmor);
+                const { effective_hp } = computeEffectiveHP(survStats);
+                const curveData = showCurve ? getCurveData(survStats) : [];
+                return (
+                  <div style={{marginTop:4, borderTop:`1px solid ${C.border}`, paddingTop:12}}>
+                    <button
+                      onClick={() => setShowCurve(s => !s)}
+                      style={{width:"100%", background:"transparent", border:"none",
+                        display:"flex", justifyContent:"space-between", alignItems:"center",
+                        cursor:"pointer", padding:0}}>
+                      <div>
+                        <span style={{color:C.textDim, fontSize:11, letterSpacing:1.5,
+                          display:"block", marginBottom:3}}>EFFECTIVE HP</span>
+                        <span style={{color:C.gold, fontSize:18, fontWeight:700}}>
+                          {effective_hp.toLocaleString()}
+                        </span>
+                      </div>
+                      <span style={{color:C.textDim, fontSize:13}}>
+                        {showCurve ? "▲ Hide curve" : "▼ Show curve"}
+                      </span>
+                    </button>
+
+                    {showCurve && (
+                      <div style={{marginTop:14}}>
+                        <p style={{color:C.textDim, fontSize:11, letterSpacing:1, margin:"0 0 8px"}}>
+                          EFFECTIVE HP BY HIT SIZE
+                        </p>
+                        <ResponsiveContainer width="100%" height={180}>
+                          <LineChart data={curveData}
+                            margin={{top:4, right:8, left:8, bottom:4}}>
+                            <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
+                            <XAxis dataKey="hit"
+                              tick={{fill:C.textDim, fontSize:10}}
+                              tickLine={false}
+                              axisLine={{stroke:C.border}}
+                            />
+                            <YAxis
+                              tick={{fill:C.textDim, fontSize:10}}
+                              tickLine={false}
+                              axisLine={{stroke:C.border}}
+                              tickFormatter={v => v >= 1000 ? `${Math.round(v/1000)}k` : v}
+                              width={36}
+                            />
+                            <Tooltip
+                              contentStyle={{background:C.surface, border:`1px solid ${C.border}`,
+                                borderRadius:8, color:C.text, fontSize:12}}
+                              formatter={(value) => [value.toLocaleString(), "Effective HP"]}
+                              labelFormatter={(label) => `Hit size: ${label}`}
+                            />
+                            <Line type="monotone" dataKey="effectiveHP"
+                              stroke={C.gold} strokeWidth={2}
+                              dot={{fill:C.gold, r:3}} activeDot={{r:5}}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                        <p style={{color:C.textDim, fontSize:10, margin:"8px 0 0",
+                          lineHeight:1.6, textAlign:"center"}}>
+                          Assumes optimal rune usage · {Math.round(survStats.effective_charges * 10) / 10} effective rune charges · Armor value flat reduction
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>
