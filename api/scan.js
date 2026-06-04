@@ -22,6 +22,7 @@ const VALID_STATS = new Set(ALL_STATS);
 const VALID_TYPES = new Set(["Weapon", "Accessory", "Exclusive", "Armor"]);
 const VALID_GRADES = new Set(["S", "A", "B", "C", "D"]);
 const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const STATS_ALLOW_NEGATIVE = new Set(["Ultimate Storm Enhancement"]);
 
 const NAME_MAP = {
   "GAEA SIGIL": "Gaea Sigil",
@@ -55,7 +56,7 @@ function validateAndClean(parsed) {
       if (!VALID_GRADES.has(e.grade)) return false;
       if (!e.value) return false;
       const num = parseFloat(String(e.value).replace(/[^0-9.-]/g, ""));
-      if (!isNaN(num) && num < 0) return false;
+      if (!isNaN(num) && num < 0 && !STATS_ALLOW_NEGATIVE.has(e.stat)) return false;
       if (seen.has(e.stat)) return false;
       seen.add(e.stat);
       return true;
