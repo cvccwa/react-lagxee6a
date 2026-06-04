@@ -693,7 +693,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
                         <ResponsiveContainer width="100%" height={180}>
                           <LineChart data={curveData}
                             margin={{top:4, right:8, left:8, bottom:4}}>
-                            <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
+                            <CartesianGrid strokeDasharray="3 3" stroke={C.border} fill="transparent"/>
                             <XAxis dataKey="hit"
                               tick={{fill:C.textDim, fontSize:10}}
                               tickLine={false}
@@ -707,6 +707,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
                               width={36}
                             />
                             <Tooltip
+                              cursor={{stroke: C.border, strokeWidth: 1}}
                               contentStyle={{background:C.surface, border:`1px solid ${C.border}`,
                                 borderRadius:8, color:C.text, fontSize:12}}
                               formatter={(value) => [value.toLocaleString(), "Effective HP"]}
