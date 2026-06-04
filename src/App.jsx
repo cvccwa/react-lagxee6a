@@ -472,7 +472,18 @@ function getSurvivabilityTotals(weapon, accessory, exclusive, armor = null) {
   }).filter(s => s.total > 0);
 }
 
-const CURVE_SAMPLE_POINTS = [500, 1000, 2500, 5000, 10000, 15000, 20000];
+function getSamplePoints(total_armor_value) {
+  const startPoint = Math.ceil(total_armor_value / 500) * 500 + 500;
+  return [
+    startPoint,
+    startPoint + 1000,
+    startPoint + 2500,
+    startPoint + 5000,
+    startPoint + 10000,
+    startPoint + 15000,
+    startPoint + 20000,
+  ];
+}
 
 function getSurvivabilityStats(weapon, accessory, exclusive, armor) {
   const combo = [weapon, accessory, exclusive, armor].filter(Boolean);
@@ -525,8 +536,9 @@ function getSurvivabilityStats(weapon, accessory, exclusive, armor) {
 
 function computeEffectiveHP(stats) {
   const { total_pool, total_armor_value, total_block_rate, total_block_dr, total_dodge_rate } = stats;
-  const damage_absorbed = CURVE_SAMPLE_POINTS.map(x => {
-    const after_armor = Math.max(1, x - total_armor_value);
+  const samplePoints = getSamplePoints(total_armor_value);
+  const damage_absorbed = samplePoints.map(x => {
+    const after_armor = x - total_armor_value;
     const after_dodge = after_armor * (1 - total_dodge_rate / 100);
     const block_reduction = (total_block_rate / 100) * total_block_dr;
     const effective_hit = Math.max(1, after_dodge - block_reduction);
@@ -536,12 +548,12 @@ function computeEffectiveHP(stats) {
     999999,
     Math.round(damage_absorbed.reduce((a, b) => a + b, 0) / damage_absorbed.length)
   );
-  return { effective_hp, damage_absorbed };
+  return { effective_hp, damage_absorbed, samplePoints };
 }
 
 function getCurveData(stats) {
-  const { damage_absorbed } = computeEffectiveHP(stats);
-  return CURVE_SAMPLE_POINTS.map((x, i) => ({
+  const { damage_absorbed, samplePoints } = computeEffectiveHP(stats);
+  return samplePoints.map((x, i) => ({
     hit: x.toLocaleString(),
     hitRaw: x,
     effectiveHP: Math.round(damage_absorbed[i]),
