@@ -535,13 +535,14 @@ function getSurvivabilityStats(weapon, accessory, exclusive, armor) {
 }
 
 function computeEffectiveHP(stats) {
-  const { total_pool, total_armor_value, total_block_rate, total_block_dr, total_dodge_rate } = stats;
+  const { total_pool, total_health, total_armor_value, total_block_rate, total_block_dr, total_dodge_rate } = stats;
   const samplePoints = getSamplePoints(total_armor_value);
   const damage_absorbed = samplePoints.map(x => {
     const after_armor = x - total_armor_value;
     const after_dodge = after_armor * (1 - total_dodge_rate / 100);
     const block_reduction = (total_block_rate / 100) * total_block_dr;
     const effective_hit = Math.max(1, after_dodge - block_reduction);
+    if (effective_hit >= total_health) return total_health;
     return (total_pool / effective_hit) * x;
   });
   const effective_hp = Math.min(
