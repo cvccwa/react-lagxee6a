@@ -62,6 +62,12 @@ export const ENH_W = {
 // Pair interaction base floor (0.4 = 40% value with no partner, scales to 100% at max partner)
 export const PAIR_BASE = 0.4;
 
+// Fixed base effects on armor/amulet — not in extendedEffects
+export const BASE_BLOCK_RATE_AMULET  = 18.5; // Alchemy Amulet fixed base block rate
+export const THOR_BASE_HEALTH        = 1450;  // 700 Thor base + 750 Scroll of Immortality maxed
+export const RUNIC_ARMOR_BASE_HEALTH = 2419;  // Runic Armor fixed base health effect
+export const RUNIC_ARMOR_BASE_ARMOR  = 438;   // Runic Armor fixed base armor value
+
 // Default build requirement thresholds (all configurable in Settings)
 export const DEFAULT_REQS = {
   hss: 700,   // High-Speed Shock combined %
@@ -80,6 +86,7 @@ export const DEFAULT_REQS = {
 
 // Default skill tree contributions (all configurable in Settings)
 export const DEFAULT_SKILLS = {
+  // Damage skills
   cr: 3,       // Critical Hit Rate from skills (%)
   cd: 30,      // Critical Damage from skills (%)
   pr: 5,       // Precision Rate from skills (%)
@@ -87,6 +94,13 @@ export const DEFAULT_SKILLS = {
   pdMult: 2,   // Row 21 junction: 2 = PD×200%, 1.5 = CD×150%
   bossPriority: 50, // 0 = mob clearing, 100 = boss fight
   tdbSkill: 50,     // Total Damage Bonus from skill tree (Row 5, maxed)
+  // Survivability skills — William's Profile 1 defaults
+  skillFlatHealth: 140,  // Flat Health from skills (Row 2 + Row 8)
+  skillPctHealth:  10,   // Percentage Max Health from skills (%)
+  skillPctDmgRes:  40,   // Percentage Damage Resistance from skills (%)
+  skillBlockRate:  0,    // Block Rate from skills (%)
+  skillBlockDR:    0,    // Block Damage Reduction from skills (flat)
+  skillDodgeRate:  0,    // Dodge Rate from skills (%)
 };
 
 export const COMBO_VERSION = 1; // increment if saved combo format changes
