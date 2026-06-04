@@ -1,6 +1,10 @@
 import './style.css';
 import { useState, useEffect, useRef } from "react";
 import {
+  LineChart, Line, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, CartesianGrid
+} from "recharts";
+import {
   ENHANCEMENTS, BASE_ATTRS, MANDATORY_ENH, GRADES, GRADE_COLOR,
   C, typeColors, inp, sel, lbl, DEFAULT_SKILLS, COMBO_VERSION
 } from "./config.js";
@@ -13,7 +17,7 @@ import {
 } from "./api.js";
 import { supabase } from "./supabase.js";
 
-const APP_VERSION = "1.3.1";
+const APP_VERSION = "1.3.3";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
@@ -39,7 +43,7 @@ function TypeBadge({type}) {
   return <span style={{background:tc.bg,border:`1px solid ${tc.border}`,color:tc.text,padding:"5px 12px",borderRadius:4,fontSize:13,fontWeight:700,letterSpacing:1}}>{(type||"").toUpperCase()}</span>;
 }
 
-function GearCard({item,onDelete,highlight}) {
+function GearCard({item,onDelete,highlight,onSelect,selected}) {
   const [expanded,setExpanded] = useState(false);
   const mandatory=MANDATORY_ENH.filter(m=>item.extendedEffects?.some(e=>e.stat===m));
   return (
@@ -70,6 +74,7 @@ function GearCard({item,onDelete,highlight}) {
               {mandatory.map(m=><span key={m} style={{background:C.purpleDim,border:"1px solid #5b2d8b",borderRadius:4,padding:"5px 11px",fontSize:13,color:C.purpleLight}}>⚡ {m.replace(" Enhancement","")}</span>)}
             </div>
           )}
+          {onSelect&&<button onClick={()=>onSelect(item)} style={{marginTop:12,padding:"13px 20px",background:selected?C.greenDim:"#130f00",border:`1px solid ${selected?C.green:C.gold}`,color:selected?C.green:C.gold,borderRadius:8,cursor:"pointer",fontSize:15,fontFamily:"'Courier New',monospace"}}>{selected?"✓ EQUIPPED":"➤ Equip"}</button>}
           {onDelete&&<button onClick={()=>onDelete(item.id)} style={{marginTop:12,padding:"13px 20px",background:"transparent",border:"1px solid #3a1010",color:"#884444",borderRadius:8,cursor:"pointer",fontSize:15,fontFamily:"'Courier New',monospace"}}>✕ Remove</button>}
         </div>
       )}
@@ -412,9 +417,9 @@ function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts
 
         {/* Filter */}
         <div style={{display:"flex",gap:6,flexWrap:"nowrap",overflowX:"auto",alignItems:"center"}}>
-          {["All","Weapon","Accessory","Exclusive"].map(t=>(
+          {["All","Weapon","Accessory","Exclusive","Armor"].map(t=>(
             <button key={t} onClick={()=>setFilterType(t)} style={{padding:"8px 10px",background:filterType===t?"#1a1200":"transparent",border:`1.5px solid ${filterType===t?C.gold:C.border}`,color:filterType===t?C.gold:C.textDim,borderRadius:8,cursor:"pointer",fontSize:13,fontFamily:"'Courier New',monospace",whiteSpace:"nowrap",flexShrink:0}}>
-              {t}{t!=="All"?` (${counts[t]})`:` (${items.length})`}
+              {t}{t!=="All"?` (${counts[t]??0})`:` (${items.length})`}
             </button>
           ))}
         </div>
@@ -449,8 +454,9 @@ const SURVIVABILITY_STATS = [
   { key:"Health Restored on Kill", label:"Health on Kill",    unit:""   },
 ];
 
-function getSurvivabilityTotals(weapon, accessory, exclusive) {
+function getSurvivabilityTotals(weapon, accessory, exclusive, armor = null) {
   const combo = [weapon, accessory, exclusive];
+  if (armor) combo.push(armor);
   return SURVIVABILITY_STATS.map(({key, label, unit}) => {
     let total = 0;
     for (const item of combo) {
@@ -465,8 +471,75 @@ function getSurvivabilityTotals(weapon, accessory, exclusive) {
   }).filter(s => s.total > 0);
 }
 
-function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, deleteCombo}) {
+const THOR_BASE_HEALTH = 2500; // verify in-game — stat screen with no gear/health skills
+const CURVE_SAMPLE_POINTS = [500, 1000, 2500, 5000, 10000, 15000, 20000];
+
+function getSurvivabilityStats(weapon, accessory, exclusive, armor) {
+  const combo = [weapon, accessory, exclusive, armor].filter(Boolean);
+  const getTotal = (statName) => {
+    let total = 0;
+    for (const item of combo) {
+      for (const e of (item?.extendedEffects || [])) {
+        if (e.stat === statName) {
+          const n = parseFloat(String(e.value).replace(/[^0-9.-]/g, ""));
+          if (!isNaN(n)) total += n;
+        }
+      }
+    }
+    return total;
+  };
+
+  const flat_health    = getTotal("Health");
+  const pct_health     = getTotal("Percentage Health");
+  const armor_value    = getTotal("Armor");
+  const block_rate     = getTotal("Block Rate");
+  const block_dr       = getTotal("Block Damage Reduction");
+  const dodge_rate     = getTotal("Dodge Rate");
+  const rune_slots     = getTotal("Healing Rune Charge Slots");
+  const rune_cdr       = getTotal("Healing Rune Cooldown Reduction");
+  const respire        = getTotal("Health Restored Per/s (Restorative Respire)");
+  const health_on_kill = getTotal("Health Restored on Kill");
+
+  const total_health = (THOR_BASE_HEALTH + flat_health) * (1 + pct_health / 100);
+  const cdr_bonus = rune_cdr / 100;
+  const effective_charges = 3 + rune_slots + cdr_bonus;
+  const rune_pool = total_health * 0.60 * effective_charges;
+  const total_pool = total_health + rune_pool;
+
+  return {
+    total_health, armor_value, block_rate, block_dr, dodge_rate,
+    effective_charges, rune_pool, total_pool, respire, health_on_kill,
+  };
+}
+
+function computeEffectiveHP(stats) {
+  const { total_pool, armor_value, block_rate, block_dr, dodge_rate } = stats;
+  const damage_absorbed = CURVE_SAMPLE_POINTS.map(x => {
+    const after_armor = Math.max(1, x - armor_value);
+    const after_dodge = after_armor * (1 - dodge_rate / 100);
+    const block_reduction = (block_rate / 100) * block_dr;
+    const effective_hit = Math.max(1, after_dodge - block_reduction);
+    return (total_pool / effective_hit) * x;
+  });
+  const effective_hp = Math.min(
+    999999,
+    Math.round(damage_absorbed.reduce((a, b) => a + b, 0) / damage_absorbed.length)
+  );
+  return { effective_hp, damage_absorbed };
+}
+
+function getCurveData(stats) {
+  const { damage_absorbed } = computeEffectiveHP(stats);
+  return CURVE_SAMPLE_POINTS.map((x, i) => ({
+    hit: x.toLocaleString(),
+    hitRaw: x,
+    effectiveHP: Math.round(damage_absorbed[i]),
+  }));
+}
+
+function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, deleteCombo, equippedArmor}) {
   const [showBuildInfo, setShowBuildInfo] = useState(false);
+  const [showCurve, setShowCurve] = useState(false);
   const [activeTab, setActiveTab] = useState("current");
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -510,7 +583,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
     return { pr_total, pd_total, cr_total, cd_total, displayed_tob, tdb, boss };
   };
 
-  const getSurvivability = (w, a, e) => getSurvivabilityTotals(w, a, e);
+  const getSurvivability = (w, a, e) => getSurvivabilityTotals(w, a, e, equippedArmor);
 
   const renderComboPanel = (w, a, e, reqResult, isCurrent, savedCombo = null) => {
     const reqs = getReqs();
@@ -576,7 +649,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
               {/* Survivability */}
               {surv.length > 0 && (
                 <div>
-                  <p style={{color:C.textDim, margin:"0 0 10px", fontSize:11, letterSpacing:1.5}}>SURVIVABILITY (EXCL. ARMOR)</p>
+                  <p style={{color:C.textDim, margin:"0 0 10px", fontSize:11, letterSpacing:1.5}}>{equippedArmor ? "SURVIVABILITY (INCL. ARMOR)" : "SURVIVABILITY (EXCL. ARMOR)"}</p>
                   <div style={{display:"flex", flexDirection:"column", gap:8}}>
                     {surv.map(s => (
                       <div key={s.label} style={{display:"flex", justifyContent:"space-between", fontSize:14}}>
@@ -587,12 +660,80 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
                   </div>
                 </div>
               )}
+
+              {/* Effective HP + curve */}
+              {(() => {
+                const survStats = getSurvivabilityStats(w, a, e, equippedArmor);
+                const { effective_hp } = computeEffectiveHP(survStats);
+                const curveData = showCurve ? getCurveData(survStats) : [];
+                return (
+                  <div style={{marginTop:4, borderTop:`1px solid ${C.border}`, paddingTop:12}}>
+                    <button
+                      onClick={() => setShowCurve(s => !s)}
+                      style={{width:"100%", background:"transparent", border:"none",
+                        display:"flex", justifyContent:"space-between", alignItems:"center",
+                        cursor:"pointer", padding:0}}>
+                      <div>
+                        <span style={{color:C.textDim, fontSize:11, letterSpacing:1.5,
+                          display:"block", marginBottom:3}}>EFFECTIVE HP</span>
+                        <span style={{color:C.gold, fontSize:18, fontWeight:700}}>
+                          {effective_hp.toLocaleString()}
+                        </span>
+                      </div>
+                      <span style={{color:C.textDim, fontSize:13}}>
+                        {showCurve ? "▲ Hide curve" : "▼ Show curve"}
+                      </span>
+                    </button>
+
+                    {showCurve && (
+                      <div style={{marginTop:14}}>
+                        <p style={{color:C.textDim, fontSize:11, letterSpacing:1, margin:"0 0 8px"}}>
+                          EFFECTIVE HP BY HIT SIZE
+                        </p>
+                        <ResponsiveContainer width="100%" height={180}>
+                          <LineChart data={curveData}
+                            margin={{top:4, right:8, left:8, bottom:4}}>
+                            <CartesianGrid strokeDasharray="3 3" stroke={C.border}/>
+                            <XAxis dataKey="hit"
+                              tick={{fill:C.textDim, fontSize:10}}
+                              tickLine={false}
+                              axisLine={{stroke:C.border}}
+                            />
+                            <YAxis
+                              tick={{fill:C.textDim, fontSize:10}}
+                              tickLine={false}
+                              axisLine={{stroke:C.border}}
+                              tickFormatter={v => v >= 1000 ? `${Math.round(v/1000)}k` : v}
+                              width={36}
+                            />
+                            <Tooltip
+                              contentStyle={{background:C.surface, border:`1px solid ${C.border}`,
+                                borderRadius:8, color:C.text, fontSize:12}}
+                              formatter={(value) => [value.toLocaleString(), "Effective HP"]}
+                              labelFormatter={(label) => `Hit size: ${label}`}
+                            />
+                            <Line type="monotone" dataKey="effectiveHP"
+                              stroke={C.gold} strokeWidth={2}
+                              dot={{fill:C.gold, r:3}} activeDot={{r:5}}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                        <p style={{color:C.textDim, fontSize:10, margin:"8px 0 0",
+                          lineHeight:1.6, textAlign:"center"}}>
+                          Assumes optimal rune usage · {Math.round(survStats.effective_charges * 10) / 10} effective rune charges · Armor value flat reduction
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>
 
         {/* Gear cards */}
         {[w, a, e].map(p => <GearCard key={p.id} item={p} highlight={isCurrent} />)}
+        {equippedArmor && <GearCard key={equippedArmor.id} item={equippedArmor} highlight={isCurrent} />}
       </div>
     );
   };
@@ -708,7 +849,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
 
 // ── Build Tab ─────────────────────────────────────────────────────────────────
 
-function BuildTab({ onSave, optimResult, session }) {
+function BuildTab({ onSave, optimResult, session, equippedArmor, selectArmor, armorItems }) {
   const [reqs, setReqs] = useState(() => getReqs());
   const [skills, setSkills] = useState(() => getSkills());
   const [saved, setSaved] = useState(false);
@@ -731,6 +872,23 @@ function BuildTab({ onSave, optimResult, session }) {
 
   return (
     <div style={{display:"flex", flexDirection:"column", gap:14, paddingBottom:20, overflowY:"auto", height:"100%"}}>
+
+      {/* Armor Slot */}
+      <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:"18px"}}>
+        <h3 style={{color:C.gold, margin:"0 0 8px", fontSize:15, letterSpacing:1.5}}>ARMOR SLOT</h3>
+        <p style={{color:C.textDim, fontSize:13, margin:"0 0 14px", lineHeight:1.7}}>
+          {equippedArmor
+            ? <span>Equipped: <span style={{color:C.text, fontWeight:600}}>{equippedArmor.name}</span> ★{equippedArmor.rating}. Its stats are included in survivability on the Optimize tab.</span>
+            : "Select the armor you use. Its stats will be included in survivability calculations on the Optimize tab."}
+        </p>
+        {armorItems.length === 0 ? (
+          <p style={{color:C.textDim, fontSize:13, textAlign:"center", margin:0, padding:"6px 0"}}>No armor in inventory — scan armor gear cards on the ADD tab.</p>
+        ) : (
+          armorItems.map(item => (
+            <GearCard key={item.id} item={item} onSelect={selectArmor} selected={equippedArmor?.id === item.id} highlight={equippedArmor?.id === item.id}/>
+          ))
+        )}
+      </div>
 
       {/* Enhancement Thresholds */}
       <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:"18px"}}>
@@ -1030,6 +1188,9 @@ export default function App() {
   const [keySaved,setKeySaved] = useState(false);
   const [showMigrationPrompt,setShowMigrationPrompt] = useState(false);
   const [migrating,setMigrating] = useState(false);
+  const [equippedArmor,setEquippedArmor] = useState(() => {
+    try { const s=localStorage.getItem("bh:equippedArmor"); return s?JSON.parse(s):null; } catch { return null; }
+  });
 
   useEffect(()=>{
     // Remove legacy keys no longer used
@@ -1080,6 +1241,11 @@ export default function App() {
         const allItems = [...supabaseItems, ...synced];
         setItems(allItems);
         localStorage.setItem("bh:gear:v1", JSON.stringify(allItems));
+        const storedArmor = JSON.parse(localStorage.getItem("bh:equippedArmor") || "null");
+        if (storedArmor && !allItems.find(i => i.id === storedArmor.id)) {
+          setEquippedArmor(null);
+          localStorage.removeItem("bh:equippedArmor");
+        }
       } else {
         // New account — migration prompt covers all local items (including any pending)
         localStorage.removeItem("bh:pending");
@@ -1320,6 +1486,10 @@ export default function App() {
   };
 
   const deleteItem = async (id) => {
+    if (equippedArmor?.id === id) {
+      setEquippedArmor(null);
+      localStorage.removeItem("bh:equippedArmor");
+    }
     const newItems = items.filter(i => i.id !== id);
     setItems(newItems);
     localStorage.setItem("bh:gear:v1", JSON.stringify(newItems));
@@ -1329,6 +1499,15 @@ export default function App() {
         console.error("[inventory] Failed to delete from Supabase:", err)
       );
     }
+  };
+
+  const selectArmor = (item) => {
+    const next = equippedArmor?.id === item.id ? null : item;
+    setEquippedArmor(next);
+    try {
+      if (next) localStorage.setItem("bh:equippedArmor", JSON.stringify(next));
+      else localStorage.removeItem("bh:equippedArmor");
+    } catch {}
   };
 
   const runOptimize = () => setOptimResult(optimize(
@@ -1354,7 +1533,7 @@ export default function App() {
     setShowSettings(false);
   };
 
-  const counts={Weapon:items.filter(i=>i.type==="Weapon").length,Accessory:items.filter(i=>i.type==="Accessory").length,Exclusive:items.filter(i=>i.type==="Exclusive").length};
+  const counts={Weapon:items.filter(i=>i.type==="Weapon").length,Accessory:items.filter(i=>i.type==="Accessory").length,Exclusive:items.filter(i=>i.type==="Exclusive").length,Armor:items.filter(i=>i.type==="Armor").length};
   const displayItems=(filterType==="All"?items:items.filter(i=>i.type===filterType)).slice().sort((a,b)=>b.rating-a.rating);
 
   if(loading||authLoading) return (
@@ -1379,8 +1558,8 @@ export default function App() {
       <div style={{flex:1,overflow:"hidden",padding:"16px 16px 0",display:"flex",flexDirection:"column",minHeight:0}}>
         {tab==="add"&&<AddTab form={form} setForm={setForm} addItem={addItem} flash={flash} onBulkImport={bulkImport} items={items} user={user} session={session} onSignIn={handleShowAuth}/>}
         {tab==="inventory"&&<InventoryTab items={displayItems} allItems={items} filterType={filterType} setFilterType={setFilterType} deleteItem={deleteItem} counts={counts} onExport={setExportJson} onRestoreAll={restoreAll} user={user}/>}
-        {tab==="optimize"&&<OptimizeTab result={optimResult} runOptimize={runOptimize} counts={counts} savedCombos={savedCombos} saveCombo={saveCombo} deleteCombo={deleteCombo}/>}
-        {tab==="build"&&<BuildTab onSave={runOptimize} optimResult={optimResult} session={session}/>}
+        {tab==="optimize"&&<OptimizeTab result={optimResult} runOptimize={runOptimize} counts={counts} savedCombos={savedCombos} saveCombo={saveCombo} deleteCombo={deleteCombo} equippedArmor={equippedArmor}/>}
+        {tab==="build"&&<BuildTab onSave={runOptimize} optimResult={optimResult} session={session} equippedArmor={equippedArmor} selectArmor={selectArmor} armorItems={items.filter(i=>i.type==="Armor")}/>}
       </div>
 
       {/* Bottom nav */}
