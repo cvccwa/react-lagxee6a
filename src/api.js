@@ -73,9 +73,13 @@ export async function scanGearCard(base64, mimeType, session) {
 // ── Inventory (Supabase) ──────────────────────────────────────────────────────
 
 export async function fetchInventory() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
   const { data, error } = await supabase
     .from("inventory")
     .select("*")
+    .eq("user_id", user.id)
     .order("rating", { ascending: false });
 
   if (error) throw new Error(error.message);
@@ -114,10 +118,14 @@ export async function addInventoryItem(item) {
 }
 
 export async function deleteInventoryItem(id) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
   const { error } = await supabase
     .from("inventory")
     .delete()
-    .eq("id", id);
+    .eq("id", id)
+    .eq("user_id", user.id);
 
   if (error) throw new Error(error.message);
 }

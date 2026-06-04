@@ -21,6 +21,7 @@ const ALL_STATS = [
 const VALID_STATS = new Set(ALL_STATS);
 const VALID_TYPES = new Set(["Weapon", "Accessory", "Exclusive", "Armor"]);
 const VALID_GRADES = new Set(["S", "A", "B", "C", "D"]);
+const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
 const NAME_MAP = {
   "GAEA SIGIL": "Gaea Sigil",
@@ -41,8 +42,9 @@ function validateAndClean(parsed) {
   if (!parsed || typeof parsed !== "object") throw new Error("Invalid response from AI");
   if (!VALID_TYPES.has(parsed.type)) throw new Error(`Invalid type: ${parsed.type}`);
   if (!parsed.name || typeof parsed.name !== "string") throw new Error("Missing gear name");
+  if (parsed.name.length > 200) throw new Error("Gear name too long");
   const rating = +parsed.rating;
-  if (isNaN(rating) || rating < 0) throw new Error("Invalid rating");
+  if (isNaN(rating) || !isFinite(rating) || rating < 0 || rating > 100000) throw new Error("Invalid rating");
 
   parsed.name = NAME_MAP[parsed.name.toUpperCase()] || parsed.name.trim();
 
@@ -128,7 +130,9 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
 
   const { image, mimeType } = req.body;
-  if (!image) return res.status(400).json({ error: "No image provided" });
+  if (!image || typeof image !== "string") return res.status(400).json({ error: "No image provided" });
+  if (image.length > 5_000_000) return res.status(400).json({ error: "Image too large" });
+  const safeMimeType = ALLOWED_MIME_TYPES.has(mimeType) ? mimeType : "image/jpeg";
 
   const token = req.headers.authorization?.replace("Bearer ", "");
   if (!token) return res.status(401).json({ error: "Unauthorized" });
@@ -164,13 +168,14 @@ export default async function handler(req, res) {
   try {
     let parsed;
     if (provider === "gemini") {
-      parsed = await scanWithGemini(image, mimeType || "image/jpeg", key);
+      parsed = await scanWithGemini(image, safeMimeType, key);
     } else {
-      parsed = await scanWithAnthropic(image, mimeType || "image/jpeg", key);
+      parsed = await scanWithAnthropic(image, safeMimeType, key);
     }
     parsed = validateAndClean(parsed);
     return res.status(200).json(parsed);
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error("[scan] Error:", err.message);
+    return res.status(500).json({ error: "Scan failed. Please try again." });
   }
 }
