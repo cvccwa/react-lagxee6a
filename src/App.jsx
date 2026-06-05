@@ -472,9 +472,9 @@ function getSurvivabilityTotals(weapon, accessory, exclusive, armor = null) {
   }).filter(s => s.total > 0);
 }
 
-function getSamplePoints(total_armor_value) {
+function getSamplePoints(total_armor_value, total_health) {
   const startPoint = Math.ceil(total_armor_value / 500) * 500 + 500;
-  return [
+  const allPoints = [
     startPoint,
     startPoint + 1000,
     startPoint + 2500,
@@ -483,6 +483,9 @@ function getSamplePoints(total_armor_value) {
     startPoint + 15000,
     startPoint + 20000,
   ];
+  const oneShotRaw = total_health + total_armor_value;
+  const cutoffIndex = allPoints.findIndex(x => x >= oneShotRaw);
+  return cutoffIndex === -1 ? allPoints : allPoints.slice(0, cutoffIndex + 1);
 }
 
 function getSurvivabilityStats(weapon, accessory, exclusive, armor) {
@@ -536,7 +539,7 @@ function getSurvivabilityStats(weapon, accessory, exclusive, armor) {
 
 function computeEffectiveHP(stats) {
   const { total_pool, total_health, total_armor_value, total_block_rate, total_block_dr, total_dodge_rate } = stats;
-  const samplePoints = getSamplePoints(total_armor_value);
+  const samplePoints = getSamplePoints(total_armor_value, total_health);
   const damage_absorbed = samplePoints.map(x => {
     const after_armor = x - total_armor_value;
     const after_dodge = after_armor * (1 - total_dodge_rate / 100);
