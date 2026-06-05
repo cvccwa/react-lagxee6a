@@ -58,10 +58,10 @@ function GearCard({item,onDelete,highlight,onSelect,selected,forced=false,onTogg
     }}>
       {forced&&<div style={{position:"absolute",top:0,left:0,right:0,height:3,background:C.gold,borderRadius:"12px 12px 0 0"}}/>}
       <div onClick={()=>setExpanded(e=>!e)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 18px",cursor:"pointer",gap:8,minHeight:64}}>
-        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",flex:1,minWidth:0}}>
+        <div style={{display:"flex",gap:8,alignItems:"center",flex:1,minWidth:0}}>
           <TypeBadge type={item.type}/>
-          <span style={{color:C.text,fontWeight:600,fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"45%"}}>{item.name}</span>
-          <span style={{color:C.gold,fontSize:13,whiteSpace:"nowrap"}}>★ {item.rating}</span>
+          <span style={{color:C.text,fontWeight:600,fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,minWidth:0}}>{item.name}</span>
+          <span style={{color:C.gold,fontSize:13,whiteSpace:"nowrap",flexShrink:0}}>★ {item.rating}</span>
         </div>
         <div style={{display:"flex",gap:10,alignItems:"center",flexShrink:0}}>
           <button
@@ -925,20 +925,14 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
         {/* Armor recommendation — current tab only */}
         {isCurrent && (
           result?.armorResult ? (
-            <>
-              <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:4}}>
-                <p style={{color:C.textDim, fontSize:12, letterSpacing:1.5, margin:0}}>RECOMMENDED ARMOR</p>
-                {forced?.Armor && <span style={{color:C.gold, fontSize:11}}>🔒 FORCED</span>}
-              </div>
-              <GearCard
-                key={result.armorResult.armor.id}
-                item={result.armorResult.armor}
-                highlight
-                forced={forced?.Armor === result.armorResult.armor.id}
-                onToggleForce={()=>{}}
-                readOnly
-              />
-            </>
+            <GearCard
+              key={result.armorResult.armor.id}
+              item={result.armorResult.armor}
+              highlight
+              forced={forced?.Armor === result.armorResult.armor.id}
+              onToggleForce={()=>{}}
+              readOnly
+            />
           ) : (
             <p style={{color:C.textDim, fontSize:13, margin:"8px 0 0"}}>
               No armor pieces in inventory — scan your Runic Armor to enable armor optimization.
