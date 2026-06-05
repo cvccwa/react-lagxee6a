@@ -19,7 +19,7 @@ import {
 } from "./api.js";
 import { supabase } from "./supabase.js";
 
-const APP_VERSION = "1.3.5";
+const APP_VERSION = "1.3.6";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
@@ -45,11 +45,18 @@ function TypeBadge({type}) {
   return <span style={{background:tc.bg,border:`1px solid ${tc.border}`,color:tc.text,padding:"5px 12px",borderRadius:4,fontSize:13,fontWeight:700,letterSpacing:1}}>{(type||"").toUpperCase()}</span>;
 }
 
-function GearCard({item,onDelete,highlight,onSelect,selected}) {
+function GearCard({item,onDelete,highlight,onSelect,selected,forced=false,onToggleForce=()=>{},readOnly=false}) {
   const [expanded,setExpanded] = useState(false);
   const mandatory=MANDATORY_ENH.filter(m=>item.extendedEffects?.some(e=>e.stat===m));
   return (
-    <div style={{background:highlight?"#0a140a":C.surface,border:`1px solid ${highlight?"#2a4a2a":C.border}`,borderRadius:12,marginBottom:10,overflow:"hidden"}}>
+    <div style={{
+      background:highlight?"#0a140a":C.surface,
+      border:`1px solid ${forced?C.gold:highlight?"#2a4a2a":C.border}`,
+      borderRadius:12,marginBottom:10,overflow:"hidden",
+      position:"relative",
+      boxShadow:forced?`0 0 0 1px ${C.gold}`:"none",
+    }}>
+      {forced&&<div style={{position:"absolute",top:0,left:0,right:0,height:3,background:C.gold,borderRadius:"12px 12px 0 0"}}/>}
       <div onClick={()=>setExpanded(e=>!e)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 18px",cursor:"pointer",gap:8,minHeight:64}}>
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",flex:1,minWidth:0}}>
           <TypeBadge type={item.type}/>
@@ -57,6 +64,13 @@ function GearCard({item,onDelete,highlight,onSelect,selected}) {
           <span style={{color:C.gold,fontSize:13,whiteSpace:"nowrap"}}>★ {item.rating}</span>
         </div>
         <div style={{display:"flex",gap:10,alignItems:"center",flexShrink:0}}>
+          <button
+            onClick={e=>{e.stopPropagation();if(!readOnly)onToggleForce(item);}}
+            title={forced?"Click to unforce":"Click to force equip"}
+            style={{background:forced?"#1a1200":"transparent",border:`1.5px solid ${forced?C.gold:"#3a3a50"}`,borderRadius:6,padding:"4px 7px",cursor:readOnly?"default":"pointer",fontSize:13,color:forced?C.gold:"#3a3a50",flexShrink:0,display:"flex",alignItems:"center",gap:4}}>
+            {forced?"🔒":"🔓"}
+            {forced&&<span style={{fontSize:10,color:C.gold,fontFamily:"'Courier New',monospace"}}>FORCED</span>}
+          </button>
           <span style={{color:C.textDim,fontSize:20,userSelect:"none"}}>{expanded?"▲":"▼"}</span>
         </div>
       </div>
@@ -370,7 +384,7 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items,user,session,onSi
 
 // ── Inventory Tab ─────────────────────────────────────────────────────────────
 
-function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts,onExport,onRestoreAll,user}) {
+function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts,onExport,onRestoreAll,user,forced,toggleForce}) {
   const [restoreText,setRestoreText] = useState("");
   const [showRestore,setShowRestore] = useState(false);
   const [restoreMsg,setRestoreMsg] = useState({text:"",ok:true});
@@ -435,7 +449,7 @@ function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts
             <p style={{margin:"0 0 8px",fontSize:22,fontWeight:700,color:C.text}}>No gear yet</p>
             <p style={{margin:0,fontSize:16}}>Head to the ADD tab to scan or import your gear cards.</p>
           </div>
-        ):items.map(item=><GearCard key={item.id} item={item} onDelete={deleteItem}/>)}
+        ):items.map(item=><GearCard key={item.id} item={item} onDelete={deleteItem} forced={forced?.[item.type]===item.id} onToggleForce={toggleForce}/>)}
       </div>
     </div>
   );
@@ -558,6 +572,21 @@ function computeEffectiveHP(stats) {
   return { effective_hp, damage_absorbed, samplePoints };
 }
 
+function optimizeArmor(armorPieces, weapon, accessory, exclusive) {
+  if (!armorPieces.length) return null;
+  let bestArmor = null;
+  let bestEffectiveHP = -1;
+  for (const armor of armorPieces) {
+    const stats = getSurvivabilityStats(weapon, accessory, exclusive, armor);
+    const { effective_hp } = computeEffectiveHP(stats);
+    if (effective_hp > bestEffectiveHP) {
+      bestEffectiveHP = effective_hp;
+      bestArmor = armor;
+    }
+  }
+  return { armor: bestArmor, effectiveHP: bestEffectiveHP };
+}
+
 function getCurveData(stats) {
   const { damage_absorbed, samplePoints } = computeEffectiveHP(stats);
   return samplePoints.map((x, i) => ({
@@ -595,7 +624,7 @@ function getDPSCurveData(field_DPS, single_zap) {
   }));
 }
 
-function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, deleteCombo, equippedArmor}) {
+function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, deleteCombo, forced, toggleForce}) {
   const [showBuildInfo, setShowBuildInfo] = useState(false);
   const [showCurve, setShowCurve] = useState(false);
   const [showDPSCurve, setShowDPSCurve] = useState(false);
@@ -646,6 +675,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
     const reqs = getReqs();
     const displayedReqResult = reqResult || checkReqs(w, a, e, reqs);
     const stats = getStatTotals(w, a, e);
+    const armorForPanel = isCurrent ? (result?.armorResult?.armor ?? null) : null;
     return (
       <div style={{display:"flex", flexDirection:"column", gap:12}}>
         {/* BUILD INFO collapsible */}
@@ -782,7 +812,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
 
               {/* Survivability */}
               {(() => {
-                const sv = getSurvivabilityStats(w, a, e, equippedArmor);
+                const sv = getSurvivabilityStats(w, a, e, armorForPanel);
                 const statRows = [
                   { label:"Total Health",         value: Math.round(sv.total_health).toLocaleString() },
                   { label:"Armor Value",          value: sv.total_armor_value > 0 ? String(sv.total_armor_value) : null },
@@ -795,7 +825,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
                 ].filter(r => r.value !== null);
                 return (
                   <div>
-                    <p style={{color:C.textDim, margin:"0 0 10px", fontSize:11, letterSpacing:1.5}}>{equippedArmor ? "SURVIVABILITY (INCL. ARMOR)" : "SURVIVABILITY (EXCL. ARMOR)"}</p>
+                    <p style={{color:C.textDim, margin:"0 0 10px", fontSize:11, letterSpacing:1.5}}>{armorForPanel ? "SURVIVABILITY (INCL. ARMOR)" : "SURVIVABILITY (EXCL. ARMOR)"}</p>
                     <div style={{display:"flex", flexDirection:"column", gap:8}}>
                       {statRows.map(r => (
                         <div key={r.label} style={{display:"flex", justifyContent:"space-between", fontSize:13}}>
@@ -810,7 +840,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
 
               {/* Effective HP + curve */}
               {(() => {
-                const survStats = getSurvivabilityStats(w, a, e, equippedArmor);
+                const survStats = getSurvivabilityStats(w, a, e, armorForPanel);
                 const { effective_hp } = computeEffectiveHP(survStats);
                 const curveData = showCurve ? getCurveData(survStats) : [];
                 return (
@@ -880,9 +910,41 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
           )}
         </div>
 
-        {/* Gear cards */}
-        {[w, a, e].map(p => <GearCard key={p.id} item={p} highlight={isCurrent} />)}
-        {equippedArmor && <GearCard key={equippedArmor.id} item={equippedArmor} highlight={isCurrent} />}
+        {/* Recommended loadout */}
+        {isCurrent && (
+          <p style={{color:C.textDim, fontSize:12, letterSpacing:1.5, margin:"4px 0 0"}}>RECOMMENDED LOADOUT</p>
+        )}
+        {[w, a, e].map(p => (
+          <GearCard key={p.id} item={p} highlight={isCurrent}
+            forced={forced?.[p.type] === p.id}
+            onToggleForce={()=>{}}
+            readOnly
+          />
+        ))}
+
+        {/* Armor recommendation — current tab only */}
+        {isCurrent && (
+          result?.armorResult ? (
+            <>
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:4}}>
+                <p style={{color:C.textDim, fontSize:12, letterSpacing:1.5, margin:0}}>RECOMMENDED ARMOR</p>
+                {forced?.Armor && <span style={{color:C.gold, fontSize:11}}>🔒 FORCED</span>}
+              </div>
+              <GearCard
+                key={result.armorResult.armor.id}
+                item={result.armorResult.armor}
+                highlight
+                forced={forced?.Armor === result.armorResult.armor.id}
+                onToggleForce={()=>{}}
+                readOnly
+              />
+            </>
+          ) : (
+            <p style={{color:C.textDim, fontSize:13, margin:"8px 0 0"}}>
+              No armor pieces in inventory — scan your Runic Armor to enable armor optimization.
+            </p>
+          )
+        )}
       </div>
     );
   };
@@ -998,7 +1060,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
 
 // ── Build Tab ─────────────────────────────────────────────────────────────────
 
-function BuildTab({ onSave, optimResult, session, equippedArmor, selectArmor, armorItems }) {
+function BuildTab({ onSave, optimResult, session }) {
   const [reqs, setReqs] = useState(() => getReqs());
   const [skills, setSkills] = useState(() => getSkills());
   const [saved, setSaved] = useState(false);
@@ -1021,23 +1083,6 @@ function BuildTab({ onSave, optimResult, session, equippedArmor, selectArmor, ar
 
   return (
     <div style={{display:"flex", flexDirection:"column", gap:14, paddingBottom:20, overflowY:"auto", height:"100%"}}>
-
-      {/* Armor Slot */}
-      <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:"18px"}}>
-        <h3 style={{color:C.gold, margin:"0 0 8px", fontSize:15, letterSpacing:1.5}}>ARMOR SLOT</h3>
-        <p style={{color:C.textDim, fontSize:13, margin:"0 0 14px", lineHeight:1.7}}>
-          {equippedArmor
-            ? <span>Equipped: <span style={{color:C.text, fontWeight:600}}>{equippedArmor.name}</span> ★{equippedArmor.rating}. Its stats are included in survivability on the Optimize tab.</span>
-            : "Select the armor you use. Its stats will be included in survivability calculations on the Optimize tab."}
-        </p>
-        {armorItems.length === 0 ? (
-          <p style={{color:C.textDim, fontSize:13, textAlign:"center", margin:0, padding:"6px 0"}}>No armor in inventory — scan armor gear cards on the ADD tab.</p>
-        ) : (
-          armorItems.map(item => (
-            <GearCard key={item.id} item={item} onSelect={selectArmor} selected={equippedArmor?.id === item.id} highlight={equippedArmor?.id === item.id}/>
-          ))
-        )}
-      </div>
 
       {/* Enhancement Thresholds */}
       <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:"18px"}}>
@@ -1364,8 +1409,8 @@ export default function App() {
   const [keySaved,setKeySaved] = useState(false);
   const [showMigrationPrompt,setShowMigrationPrompt] = useState(false);
   const [migrating,setMigrating] = useState(false);
-  const [equippedArmor,setEquippedArmor] = useState(() => {
-    try { const s=localStorage.getItem("bh:equippedArmor"); return s?JSON.parse(s):null; } catch { return null; }
+  const [forced,setForced] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("bh:forced") || "{}"); } catch { return {}; }
   });
 
   useEffect(()=>{
@@ -1376,6 +1421,7 @@ export default function App() {
     localStorage.removeItem("bh:apiKey");
     localStorage.removeItem("bh:binId");
     localStorage.removeItem("bh:binKey");
+    localStorage.removeItem("bh:equippedArmor");
     try{const r=localStorage.getItem("bh:gear:v1");if(r)setItems(JSON.parse(r));}catch{}
     setLoading(false);
   },[]);
@@ -1417,11 +1463,13 @@ export default function App() {
         const allItems = [...supabaseItems, ...synced];
         setItems(allItems);
         localStorage.setItem("bh:gear:v1", JSON.stringify(allItems));
-        const storedArmor = JSON.parse(localStorage.getItem("bh:equippedArmor") || "null");
-        if (storedArmor && !allItems.find(i => i.id === storedArmor.id)) {
-          setEquippedArmor(null);
-          localStorage.removeItem("bh:equippedArmor");
-        }
+        setForced(prev => {
+          const next = Object.fromEntries(
+            Object.entries(prev).filter(([,id]) => allItems.find(i => i.id === id))
+          );
+          localStorage.setItem("bh:forced", JSON.stringify(next));
+          return next;
+        });
       } else {
         // New account — migration prompt covers all local items (including any pending)
         localStorage.removeItem("bh:pending");
@@ -1662,9 +1710,12 @@ export default function App() {
   };
 
   const deleteItem = async (id) => {
-    if (equippedArmor?.id === id) {
-      setEquippedArmor(null);
-      localStorage.removeItem("bh:equippedArmor");
+    if (Object.values(forced).includes(id)) {
+      setForced(prev => {
+        const next = Object.fromEntries(Object.entries(prev).filter(([,v]) => v !== id));
+        localStorage.setItem("bh:forced", JSON.stringify(next));
+        return next;
+      });
     }
     const newItems = items.filter(i => i.id !== id);
     setItems(newItems);
@@ -1677,20 +1728,44 @@ export default function App() {
     }
   };
 
-  const selectArmor = (item) => {
-    const next = equippedArmor?.id === item.id ? null : item;
-    setEquippedArmor(next);
-    try {
-      if (next) localStorage.setItem("bh:equippedArmor", JSON.stringify(next));
-      else localStorage.removeItem("bh:equippedArmor");
-    } catch {}
+  const toggleForce = (item) => {
+    setForced(prev => {
+      const next = { ...prev };
+      if (next[item.type] === item.id) {
+        delete next[item.type];
+      } else {
+        next[item.type] = item.id;
+      }
+      localStorage.setItem("bh:forced", JSON.stringify(next));
+      return next;
+    });
   };
 
-  const runOptimize = () => setOptimResult(optimize(
-    items.filter(i=>i.type==="Weapon"),
-    items.filter(i=>i.type==="Accessory"),
-    items.filter(i=>i.type==="Exclusive")
-  ));
+  const runOptimize = () => {
+    const dpsResult = optimize(
+      items.filter(i => i.type === "Weapon"),
+      items.filter(i => i.type === "Accessory"),
+      items.filter(i => i.type === "Exclusive"),
+      forced
+    );
+    if (!dpsResult) return;
+
+    let armorResult = null;
+    if (forced.Armor) {
+      const forcedArmor = items.find(i => i.id === forced.Armor);
+      if (forcedArmor) {
+        const stats = getSurvivabilityStats(dpsResult.weapon, dpsResult.accessory, dpsResult.exclusive, forcedArmor);
+        armorResult = { armor: forcedArmor, effectiveHP: computeEffectiveHP(stats).effective_hp };
+      }
+    } else {
+      armorResult = optimizeArmor(
+        items.filter(i => i.type === "Armor"),
+        dpsResult.weapon, dpsResult.accessory, dpsResult.exclusive
+      );
+    }
+
+    setOptimResult({ ...dpsResult, armorResult });
+  };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -1733,9 +1808,9 @@ export default function App() {
       {/* Content */}
       <div style={{flex:1,overflow:"hidden",padding:"16px 16px 0",display:"flex",flexDirection:"column",minHeight:0}}>
         {tab==="add"&&<AddTab form={form} setForm={setForm} addItem={addItem} flash={flash} onBulkImport={bulkImport} items={items} user={user} session={session} onSignIn={handleShowAuth}/>}
-        {tab==="inventory"&&<InventoryTab items={displayItems} allItems={items} filterType={filterType} setFilterType={setFilterType} deleteItem={deleteItem} counts={counts} onExport={setExportJson} onRestoreAll={restoreAll} user={user}/>}
-        {tab==="optimize"&&<OptimizeTab result={optimResult} runOptimize={runOptimize} counts={counts} savedCombos={savedCombos} saveCombo={saveCombo} deleteCombo={deleteCombo} equippedArmor={equippedArmor}/>}
-        {tab==="build"&&<BuildTab onSave={runOptimize} optimResult={optimResult} session={session} equippedArmor={equippedArmor} selectArmor={selectArmor} armorItems={items.filter(i=>i.type==="Armor")}/>}
+        {tab==="inventory"&&<InventoryTab items={displayItems} allItems={items} filterType={filterType} setFilterType={setFilterType} deleteItem={deleteItem} counts={counts} onExport={setExportJson} onRestoreAll={restoreAll} user={user} forced={forced} toggleForce={toggleForce}/>}
+        {tab==="optimize"&&<OptimizeTab result={optimResult} runOptimize={runOptimize} counts={counts} savedCombos={savedCombos} saveCombo={saveCombo} deleteCombo={deleteCombo} forced={forced} toggleForce={toggleForce}/>}
+        {tab==="build"&&<BuildTab onSave={runOptimize} optimResult={optimResult} session={session}/>}
       </div>
 
       {/* Bottom nav */}
