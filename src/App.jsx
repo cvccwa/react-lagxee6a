@@ -472,9 +472,9 @@ function getSurvivabilityTotals(weapon, accessory, exclusive, armor = null) {
   }).filter(s => s.total > 0);
 }
 
-function getSamplePoints(total_armor_value) {
+function getSamplePoints(total_armor_value, total_health) {
   const startPoint = Math.ceil(total_armor_value / 500) * 500 + 500;
-  return [
+  const allPoints = [
     startPoint,
     startPoint + 1000,
     startPoint + 2500,
@@ -483,6 +483,9 @@ function getSamplePoints(total_armor_value) {
     startPoint + 15000,
     startPoint + 20000,
   ];
+  const oneShotRaw = total_health + total_armor_value;
+  const cutoffIndex = allPoints.findIndex(x => x >= oneShotRaw);
+  return cutoffIndex === -1 ? allPoints : allPoints.slice(0, cutoffIndex + 1);
 }
 
 function getSurvivabilityStats(weapon, accessory, exclusive, armor) {
@@ -518,7 +521,9 @@ function getSurvivabilityStats(weapon, accessory, exclusive, armor) {
   const pct_multiplier = 1 + (skills.skillPctHealth + skills.skillPctDmgRes + gear_pct_health) / 100;
   const total_health = flat_health * pct_multiplier;
 
-  const total_armor_value = gear_armor_value + (armor ? RUNIC_ARMOR_BASE_ARMOR : 0);
+  const total_armor_value = gear_armor_value
+                          + skills.skillArmorValue
+                          + (armor ? RUNIC_ARMOR_BASE_ARMOR : 0);
   const total_block_rate  = gear_block_rate + skills.skillBlockRate + BASE_BLOCK_RATE_AMULET;
   const total_block_dr    = gear_block_dr + skills.skillBlockDR;
   const total_dodge_rate  = gear_dodge_rate + skills.skillDodgeRate;
@@ -536,7 +541,7 @@ function getSurvivabilityStats(weapon, accessory, exclusive, armor) {
 
 function computeEffectiveHP(stats) {
   const { total_pool, total_health, total_armor_value, total_block_rate, total_block_dr, total_dodge_rate } = stats;
-  const samplePoints = getSamplePoints(total_armor_value);
+  const samplePoints = getSamplePoints(total_armor_value, total_health);
   const damage_absorbed = samplePoints.map(x => {
     const after_armor = x - total_armor_value;
     const after_dodge = after_armor * (1 - total_dodge_rate / 100);
@@ -1038,12 +1043,13 @@ function BuildTab({ onSave, optimResult, session, equippedArmor, selectArmor, ar
         <p style={{color:C.textDim, fontSize:11, letterSpacing:1.5, margin:"0 0 12px"}}>SURVIVABILITY</p>
         <div style={{display:"flex", flexDirection:"column", gap:14}}>
           {[
-            {key:"skillFlatHealth", label:"Flat Health",                  unit:""},
-            {key:"skillPctHealth",  label:"Percentage Max Health",        unit:"%"},
-            {key:"skillPctDmgRes",  label:"Percentage Damage Resistance", unit:"%"},
-            {key:"skillBlockRate",  label:"Block Rate",                   unit:"%"},
-            {key:"skillBlockDR",    label:"Block Damage Reduction",       unit:""},
-            {key:"skillDodgeRate",  label:"Dodge Rate",                   unit:"%"},
+            {key:"skillFlatHealth",  label:"Flat Health",                  unit:""},
+            {key:"skillPctHealth",   label:"Percentage Max Health",        unit:"%"},
+            {key:"skillPctDmgRes",   label:"Percentage Damage Resistance", unit:"%"},
+            {key:"skillArmorValue",  label:"Armor Value",                  unit:""},
+            {key:"skillBlockRate",   label:"Block Rate",                   unit:"%"},
+            {key:"skillBlockDR",     label:"Block Damage Reduction",       unit:""},
+            {key:"skillDodgeRate",   label:"Dodge Rate",                   unit:"%"},
           ].map(({key, label, unit}) => (
             <div key={key} style={{display:"flex", alignItems:"center", gap:10}}>
               <label style={{...lbl, marginBottom:0, flex:1, fontSize:13}}>{label}</label>

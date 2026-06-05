@@ -98,6 +98,7 @@ export const DEFAULT_SKILLS = {
   skillFlatHealth: 140,  // Flat Health from skills (Row 2 + Row 8)
   skillPctHealth:  10,   // Percentage Max Health from skills (%)
   skillPctDmgRes:  40,   // Percentage Damage Resistance from skills (%)
+  skillArmorValue: 100,  // Flat Armor Value from skills
   skillBlockRate:  0,    // Block Rate from skills (%)
   skillBlockDR:    0,    // Block Damage Reduction from skills (flat)
   skillDodgeRate:  0,    // Dodge Rate from skills (%)
