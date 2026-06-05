@@ -694,9 +694,10 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
     const reqs = getReqs();
     const displayedReqResult = reqResult || checkReqs(w, a, e, reqs);
     const stats = getStatTotals(w, a, e);
+    const savedArmor = (!isCurrent && savedCombo?.ar) ? decompressItem(savedCombo.ar) : null;
     const armorForPanel = isCurrent
       ? (result?.armorResult?.armor ?? null)
-      : (currentResult?.armorResult?.armor ?? null);
+      : (savedArmor ?? currentResult?.armorResult?.armor ?? null);
     return (
       <div style={{display:"flex", flexDirection:"column", gap:12}}>
         {/* BUILD INFO collapsible */}
@@ -1697,6 +1698,7 @@ export default function App() {
       w: compressItem(optimResult.weapon),
       a: compressItem(optimResult.accessory),
       e: compressItem(optimResult.exclusive),
+      ar: optimResult.armorResult?.armor ? compressItem(optimResult.armorResult.armor) : null,
     };
     const next = [...savedCombos.filter(c => c.name !== name), combo];
     setSavedCombos(next);
