@@ -19,7 +19,7 @@ import {
 } from "./api.js";
 import { supabase } from "./supabase.js";
 
-const APP_VERSION = "1.3.6";
+const APP_VERSION = "1.3.7";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
@@ -554,22 +554,41 @@ function getSurvivabilityStats(weapon, accessory, exclusive, armor) {
   };
 }
 
-function computeEffectiveHP(stats) {
+function computePointEffectiveHP(x, stats) {
   const { total_pool, total_health, total_armor_value, total_block_rate, total_block_dr, total_dodge_rate } = stats;
+  if (x <= total_armor_value) return total_health;
+  const after_armor = x - total_armor_value;
+  const after_dodge = after_armor * (1 - total_dodge_rate / 100);
+  const block_reduction = (total_block_rate / 100) * total_block_dr;
+  const effective_hit = Math.max(1, after_dodge - block_reduction);
+  if (effective_hit >= total_health) return total_health;
+  return (total_pool / effective_hit) * x;
+}
+
+function computeEffectiveHP(stats) {
+  const { total_armor_value, total_health } = stats;
   const samplePoints = getSamplePoints(total_armor_value, total_health);
-  const damage_absorbed = samplePoints.map(x => {
-    const after_armor = x - total_armor_value;
-    const after_dodge = after_armor * (1 - total_dodge_rate / 100);
-    const block_reduction = (total_block_rate / 100) * total_block_dr;
-    const effective_hit = Math.max(1, after_dodge - block_reduction);
-    if (effective_hit >= total_health) return total_health;
-    return (total_pool / effective_hit) * x;
-  });
+  const damage_absorbed = samplePoints.map(x => computePointEffectiveHP(x, stats));
   const effective_hp = Math.min(
     999999,
     Math.round(damage_absorbed.reduce((a, b) => a + b, 0) / damage_absorbed.length)
   );
   return { effective_hp, damage_absorbed, samplePoints };
+}
+
+function buildComparisonData(primaryStats, secondaryStats = null) {
+  const primaryPoints = getSamplePoints(primaryStats.total_armor_value, primaryStats.total_health);
+  return primaryPoints.map(x => {
+    const point = {
+      hit: x.toLocaleString(),
+      hitRaw: x,
+      primary: Math.round(computePointEffectiveHP(x, primaryStats)),
+    };
+    if (secondaryStats) {
+      point.secondary = Math.round(computePointEffectiveHP(x, secondaryStats));
+    }
+    return point;
+  });
 }
 
 function optimizeArmor(armorPieces, weapon, accessory, exclusive) {
@@ -671,11 +690,14 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
     return { pr_total, pd_total, cr_total, cd_total, displayed_tob, tdb, boss };
   };
 
-  const renderComboPanel = (w, a, e, reqResult, isCurrent, savedCombo = null) => {
+  const renderComboPanel = (w, a, e, reqResult, isCurrent, savedCombo = null, currentResult = null) => {
     const reqs = getReqs();
     const displayedReqResult = reqResult || checkReqs(w, a, e, reqs);
     const stats = getStatTotals(w, a, e);
-    const armorForPanel = isCurrent ? (result?.armorResult?.armor ?? null) : null;
+    const savedArmor = (!isCurrent && savedCombo?.ar) ? decompressItem(savedCombo.ar) : null;
+    const armorForPanel = isCurrent
+      ? (result?.armorResult?.armor ?? null)
+      : (savedArmor ?? currentResult?.armorResult?.armor ?? null);
     return (
       <div style={{display:"flex", flexDirection:"column", gap:12}}>
         {/* BUILD INFO collapsible */}
@@ -734,9 +756,12 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
 
               {/* DPS Curve — collapsible, between Damage Stats and Survivability */}
               {(() => {
-                const { field_DPS, single_zap } = scoreCombo(w, a, e, getSkills());
-                const curveData = showDPSCurve ? getDPSCurveData(field_DPS, single_zap) : [];
-                const enrageHealth = Math.round(field_DPS * ENRAGE_TIMER);
+                const primaryScore = scoreCombo(w, a, e, getSkills());
+                const { field_DPS: primaryDPS, single_zap: primaryZap } = primaryScore;
+                const secondaryScore = (!isCurrent && currentResult)
+                  ? scoreCombo(currentResult.weapon, currentResult.accessory, currentResult.exclusive, getSkills())
+                  : null;
+                const secondaryDPS = secondaryScore?.field_DPS ?? null;
                 return (
                   <div style={{marginTop:12, borderTop:`1px solid ${C.border}`, paddingTop:12}}>
                     <button
@@ -748,64 +773,92 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
                         <span style={{color:C.textDim, fontSize:11, letterSpacing:1.5,
                           display:"block", marginBottom:3}}>FIELD DPS</span>
                         <span style={{color:C.gold, fontSize:18, fontWeight:700}}>
-                          {formatLargeNumber(Math.round(field_DPS))}
+                          {formatLargeNumber(Math.round(primaryDPS))}
                         </span>
+                        {secondaryDPS && (
+                          <span style={{color:C.purpleLight, fontSize:13, marginLeft:12}}>
+                            Current: {formatLargeNumber(Math.round(secondaryDPS))}
+                          </span>
+                        )}
                       </div>
                       <span style={{color:C.textDim, fontSize:13}}>
                         {showDPSCurve ? "▲ Hide curve" : "▼ Show curve"}
                       </span>
                     </button>
 
-                    {showDPSCurve && (
-                      <div style={{marginTop:14}}>
-                        <p style={{color:C.textDim, fontSize:11, letterSpacing:1, margin:"0 0 8px"}}>
-                          TIME TO KILL (SECONDS)
-                        </p>
-                        <ResponsiveContainer width="100%" height={180}>
-                          <LineChart data={curveData}
-                            margin={{top:4, right:8, left:8, bottom:4}}>
-                            <CartesianGrid strokeDasharray="3 3" stroke={C.border} fill="transparent"/>
-                            <XAxis
-                              dataKey="health"
-                              tick={{fill:C.textDim, fontSize:10}}
-                              tickLine={false}
-                              axisLine={{stroke:C.border}}
-                            />
-                            <YAxis
-                              tick={{fill:C.textDim, fontSize:10}}
-                              tickLine={false}
-                              axisLine={{stroke:C.border}}
-                              tickFormatter={v => `${v}s`}
-                              width={36}
-                            />
-                            <ReferenceLine
-                              y={ENRAGE_TIMER}
-                              stroke="#f87171"
-                              strokeDasharray="4 4"
-                              label={{value:"Enrage", fill:"#f87171", fontSize:10, position:"insideTopRight"}}
-                            />
-                            <Tooltip
-                              contentStyle={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, color:C.text, fontSize:12}}
-                              formatter={(value) => [`${value}s`, "Time to Kill"]}
-                              labelFormatter={(label) => `Enemy HP: ${label}`}
-                              cursor={{stroke:C.border, strokeWidth:1}}
-                            />
-                            <Line
-                              type="monotone"
-                              dataKey="ttk"
-                              stroke={C.gold}
-                              strokeWidth={2}
-                              dot={{fill:C.gold, r:3}}
-                              activeDot={{r:5}}
-                            />
-                          </LineChart>
-                        </ResponsiveContainer>
-                        <p style={{color:C.textDim, fontSize:10, margin:"8px 0 0",
-                          lineHeight:1.6, textAlign:"center"}}>
-                          Red line = 3-minute enrage timer · Start = single normal zap · End = max killable health ({formatLargeNumber(enrageHealth)})
-                        </p>
-                      </div>
-                    )}
+                    {showDPSCurve && (() => {
+                      const primaryCurveData = getDPSCurveData(primaryDPS, primaryZap);
+                      const secondaryCurveData = secondaryScore
+                        ? getDPSCurveData(secondaryDPS, secondaryScore.single_zap)
+                        : null;
+                      const chartData = primaryCurveData.map((d, i) => ({
+                        ...d,
+                        secondary: secondaryCurveData?.[i]?.ttk ?? null,
+                      }));
+                      const enrageHealth = Math.round(primaryDPS * ENRAGE_TIMER);
+                      return (
+                        <div style={{marginTop:14}}>
+                          <p style={{color:C.textDim, fontSize:11, letterSpacing:1, margin:"0 0 8px"}}>
+                            TIME TO KILL (SECONDS)
+                          </p>
+                          <ResponsiveContainer width="100%" height={180}>
+                            <LineChart data={chartData}
+                              margin={{top:4, right:8, left:8, bottom:4}}>
+                              <CartesianGrid strokeDasharray="3 3" stroke={C.border} fill="transparent"/>
+                              <XAxis
+                                dataKey="health"
+                                tick={{fill:C.textDim, fontSize:10}}
+                                tickLine={false}
+                                axisLine={{stroke:C.border}}
+                              />
+                              <YAxis
+                                tick={{fill:C.textDim, fontSize:10}}
+                                tickLine={false}
+                                axisLine={{stroke:C.border}}
+                                tickFormatter={v => `${v}s`}
+                                width={36}
+                              />
+                              <ReferenceLine
+                                y={ENRAGE_TIMER}
+                                stroke="#f87171"
+                                strokeDasharray="4 4"
+                                label={{value:"Enrage", fill:"#f87171", fontSize:10, position:"insideTopRight"}}
+                              />
+                              <Tooltip
+                                contentStyle={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, color:C.text, fontSize:12}}
+                                formatter={(value, name) => [
+                                  `${value}s`,
+                                  name === "ttk" ? (isCurrent ? "This build" : "Saved build") : "Current build"
+                                ]}
+                                labelFormatter={label => `Enemy HP: ${label}`}
+                                cursor={{stroke:C.border, strokeWidth:1}}
+                              />
+                              <Line type="monotone" dataKey="ttk"
+                                stroke={C.gold} strokeWidth={2}
+                                dot={{fill:C.gold, r:3}} activeDot={{r:5}}
+                              />
+                              {secondaryDPS && (
+                                <Line type="monotone" dataKey="secondary"
+                                  stroke={C.purpleLight} strokeWidth={2}
+                                  strokeDasharray="5 3"
+                                  dot={{fill:C.purpleLight, r:3}} activeDot={{r:5}}
+                                />
+                              )}
+                            </LineChart>
+                          </ResponsiveContainer>
+                          {secondaryDPS && (
+                            <div style={{display:"flex", gap:16, justifyContent:"center", marginTop:6, fontSize:11}}>
+                              <span style={{color:C.gold}}>━━ This saved build</span>
+                              <span style={{color:C.purpleLight}}>╌╌ Current build</span>
+                            </div>
+                          )}
+                          <p style={{color:C.textDim, fontSize:10, margin:"8px 0 0",
+                            lineHeight:1.6, textAlign:"center"}}>
+                            Red line = 3-minute enrage timer · Start = single normal zap · End = max killable health ({formatLargeNumber(enrageHealth)})
+                          </p>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })()}
@@ -842,7 +895,15 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
               {(() => {
                 const survStats = getSurvivabilityStats(w, a, e, armorForPanel);
                 const { effective_hp } = computeEffectiveHP(survStats);
-                const curveData = showCurve ? getCurveData(survStats) : [];
+                const secondarySurvStats = (!isCurrent && currentResult)
+                  ? getSurvivabilityStats(
+                      currentResult.weapon, currentResult.accessory, currentResult.exclusive,
+                      currentResult.armorResult?.armor ?? null
+                    )
+                  : null;
+                const secondaryEffHP = secondarySurvStats
+                  ? computeEffectiveHP(secondarySurvStats).effective_hp
+                  : null;
                 return (
                   <div style={{marginTop:4, borderTop:`1px solid ${C.border}`, paddingTop:12}}>
                     <button
@@ -856,52 +917,76 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
                         <span style={{color:C.gold, fontSize:18, fontWeight:700}}>
                           {effective_hp.toLocaleString()}
                         </span>
+                        {secondaryEffHP && (
+                          <span style={{color:C.purpleLight, fontSize:13, marginLeft:12}}>
+                            Current: {secondaryEffHP.toLocaleString()}
+                          </span>
+                        )}
                       </div>
                       <span style={{color:C.textDim, fontSize:13}}>
                         {showCurve ? "▲ Hide curve" : "▼ Show curve"}
                       </span>
                     </button>
 
-                    {showCurve && (
-                      <div style={{marginTop:14}}>
-                        <p style={{color:C.textDim, fontSize:11, letterSpacing:1, margin:"0 0 8px"}}>
-                          EFFECTIVE HP BY HIT SIZE
-                        </p>
-                        <ResponsiveContainer width="100%" height={180}>
-                          <LineChart data={curveData}
-                            margin={{top:4, right:8, left:8, bottom:4}}>
-                            <CartesianGrid strokeDasharray="3 3" stroke={C.border} fill="transparent"/>
-                            <XAxis dataKey="hit"
-                              tick={{fill:C.textDim, fontSize:10}}
-                              tickLine={false}
-                              axisLine={{stroke:C.border}}
-                            />
-                            <YAxis
-                              tick={{fill:C.textDim, fontSize:10}}
-                              tickLine={false}
-                              axisLine={{stroke:C.border}}
-                              tickFormatter={v => v >= 1000 ? `${Math.round(v/1000)}k` : v}
-                              width={36}
-                            />
-                            <Tooltip
-                              cursor={{stroke: C.border, strokeWidth: 1}}
-                              contentStyle={{background:C.surface, border:`1px solid ${C.border}`,
-                                borderRadius:8, color:C.text, fontSize:12}}
-                              formatter={(value) => [value.toLocaleString(), "Effective HP"]}
-                              labelFormatter={(label) => `Hit size: ${label}`}
-                            />
-                            <Line type="monotone" dataKey="effectiveHP"
-                              stroke={C.gold} strokeWidth={2}
-                              dot={{fill:C.gold, r:3}} activeDot={{r:5}}
-                            />
-                          </LineChart>
-                        </ResponsiveContainer>
-                        <p style={{color:C.textDim, fontSize:10, margin:"8px 0 0",
-                          lineHeight:1.6, textAlign:"center"}}>
-                          Assumes optimal rune usage · {Math.round(survStats.effective_charges * 10) / 10} effective rune charges · Armor value flat reduction
-                        </p>
-                      </div>
-                    )}
+                    {showCurve && (() => {
+                      const chartData = buildComparisonData(survStats, secondarySurvStats);
+                      return (
+                        <div style={{marginTop:14}}>
+                          <p style={{color:C.textDim, fontSize:11, letterSpacing:1, margin:"0 0 8px"}}>
+                            EFFECTIVE HP BY HIT SIZE
+                          </p>
+                          <ResponsiveContainer width="100%" height={180}>
+                            <LineChart data={chartData}
+                              margin={{top:4, right:8, left:8, bottom:4}}>
+                              <CartesianGrid strokeDasharray="3 3" stroke={C.border} fill="transparent"/>
+                              <XAxis dataKey="hit"
+                                tick={{fill:C.textDim, fontSize:10}}
+                                tickLine={false}
+                                axisLine={{stroke:C.border}}
+                              />
+                              <YAxis
+                                tick={{fill:C.textDim, fontSize:10}}
+                                tickLine={false}
+                                axisLine={{stroke:C.border}}
+                                tickFormatter={v => v >= 1000 ? `${Math.round(v/1000)}k` : v}
+                                width={36}
+                              />
+                              <Tooltip
+                                cursor={{stroke:C.border, strokeWidth:1}}
+                                contentStyle={{background:C.surface, border:`1px solid ${C.border}`,
+                                  borderRadius:8, color:C.text, fontSize:12}}
+                                formatter={(value, name) => [
+                                  value.toLocaleString(),
+                                  name === "primary" ? (isCurrent ? "This build" : "Saved build") : "Current build"
+                                ]}
+                                labelFormatter={label => `Hit size: ${label}`}
+                              />
+                              <Line type="monotone" dataKey="primary"
+                                stroke={C.gold} strokeWidth={2}
+                                dot={{fill:C.gold, r:3}} activeDot={{r:5}}
+                              />
+                              {secondarySurvStats && (
+                                <Line type="monotone" dataKey="secondary"
+                                  stroke={C.purpleLight} strokeWidth={2}
+                                  strokeDasharray="5 3"
+                                  dot={{fill:C.purpleLight, r:3}} activeDot={{r:5}}
+                                />
+                              )}
+                            </LineChart>
+                          </ResponsiveContainer>
+                          {secondarySurvStats && (
+                            <div style={{display:"flex", gap:16, justifyContent:"center", marginTop:6, fontSize:11}}>
+                              <span style={{color:C.gold}}>━━ This saved build</span>
+                              <span style={{color:C.purpleLight}}>╌╌ Current build</span>
+                            </div>
+                          )}
+                          <p style={{color:C.textDim, fontSize:10, margin:"8px 0 0",
+                            lineHeight:1.6, textAlign:"center"}}>
+                            Assumes optimal rune usage · {Math.round(survStats.effective_charges * 10) / 10} effective rune charges · Armor value flat reduction
+                          </p>
+                        </div>
+                      );
+                    })()}
                   </div>
                 );
               })()}
@@ -1017,7 +1102,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
             const saved = savedCombos.find(c => c.name === activeTab);
             if (!saved) return null;
             const { weapon, accessory, exclusive } = getComboItems(saved);
-            return renderComboPanel(weapon, accessory, exclusive, null, false, saved);
+            return renderComboPanel(weapon, accessory, exclusive, null, false, saved, result);
           })()
         )}
       </div>
@@ -1613,6 +1698,7 @@ export default function App() {
       w: compressItem(optimResult.weapon),
       a: compressItem(optimResult.accessory),
       e: compressItem(optimResult.exclusive),
+      ar: optimResult.armorResult?.armor ? compressItem(optimResult.armorResult.armor) : null,
     };
     const next = [...savedCombos.filter(c => c.name !== name), combo];
     setSavedCombos(next);
