@@ -166,6 +166,7 @@ export async function fetchSavedCombos() {
     w: row.weapon,
     a: row.accessory,
     e: row.exclusive,
+    ar: row.armor ?? null,
   }));
 }
 
@@ -182,6 +183,7 @@ export async function saveComboToSupabase(combo) {
       weapon: combo.w,
       accessory: combo.a,
       exclusive: combo.e,
+      armor: combo.ar ?? null,
     }, { onConflict: "user_id,name" });
 
   if (error) throw new Error(error.message);
