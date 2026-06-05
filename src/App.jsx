@@ -951,7 +951,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
 
         {/* Slot counts */}
         <div style={{display:"flex", gap:8}}>
-          {["Weapon","Accessory","Exclusive"].map(t => (
+          {["Weapon","Accessory","Exclusive","Armor"].map(t => (
             <div key={t} style={{flex:1, padding:"7px 6px", background:counts[t]>0?typeColors[t].bg:C.surface, border:`1px solid ${counts[t]>0?typeColors[t].border:C.border}`, borderRadius:10, textAlign:"center"}}>
               <div style={{fontSize:20, fontWeight:700, color:counts[t]>0?typeColors[t].text:C.textDim, lineHeight:1.2}}>{counts[t]}</div>
               <div style={{fontSize:9, color:C.textDim, letterSpacing:1}}>{t.toUpperCase()}</div>

@@ -120,6 +120,7 @@ export const typeColors = {
   Weapon:    { bg:"#0d1a0a", border:"#2a4a20", text:"#6abf4a" },
   Accessory: { bg:"#0a0d1a", border:"#202a4a", text:"#4a80bf" },
   Exclusive: { bg:"#1a0a0a", border:"#4a2020", text:"#bf4a4a" },
+  Armor:     { bg:"#140f00", border:"#3a2a00", text:"#e8c84a" },
 };
 
 // Shared input styles
