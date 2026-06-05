@@ -694,7 +694,9 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
     const reqs = getReqs();
     const displayedReqResult = reqResult || checkReqs(w, a, e, reqs);
     const stats = getStatTotals(w, a, e);
-    const armorForPanel = isCurrent ? (result?.armorResult?.armor ?? null) : null;
+    const armorForPanel = isCurrent
+      ? (result?.armorResult?.armor ?? null)
+      : (currentResult?.armorResult?.armor ?? null);
     return (
       <div style={{display:"flex", flexDirection:"column", gap:12}}>
         {/* BUILD INFO collapsible */}
