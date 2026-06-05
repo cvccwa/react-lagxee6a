@@ -702,103 +702,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
                 </div>
               </div>
 
-              {/* Survivability */}
-              {(() => {
-                const sv = getSurvivabilityStats(w, a, e, equippedArmor);
-                const statRows = [
-                  { label:"Total Health",         value: Math.round(sv.total_health).toLocaleString() },
-                  { label:"Armor Value",          value: sv.total_armor_value > 0 ? String(sv.total_armor_value) : null },
-                  { label:"Block Rate",           value: sv.total_block_rate > 0 ? `${Math.round(sv.total_block_rate * 10)/10}%` : null },
-                  { label:"Block Dmg Reduction",  value: sv.total_block_dr > 0 ? String(sv.total_block_dr) : null },
-                  { label:"Dodge Rate",           value: sv.total_dodge_rate > 0 ? `${sv.total_dodge_rate}%` : null },
-                  { label:"Rune Charges",         value: `${Math.round(sv.effective_charges * 10)/10}` },
-                  { label:"Health/s (Respire)",   value: sv.gear_respire > 0 ? String(sv.gear_respire) : null },
-                  { label:"Health on Kill",       value: sv.gear_health_on_kill > 0 ? String(sv.gear_health_on_kill) : null },
-                ].filter(r => r.value !== null);
-                return (
-                  <div>
-                    <p style={{color:C.textDim, margin:"0 0 10px", fontSize:11, letterSpacing:1.5}}>{equippedArmor ? "SURVIVABILITY (INCL. ARMOR)" : "SURVIVABILITY (EXCL. ARMOR)"}</p>
-                    <div style={{display:"flex", flexDirection:"column", gap:8}}>
-                      {statRows.map(r => (
-                        <div key={r.label} style={{display:"flex", justifyContent:"space-between", fontSize:13}}>
-                          <span style={{color:C.text}}>{r.label}</span>
-                          <span style={{color:C.gold}}>{r.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Effective HP + curve */}
-              {(() => {
-                const survStats = getSurvivabilityStats(w, a, e, equippedArmor);
-                const { effective_hp } = computeEffectiveHP(survStats);
-                const curveData = showCurve ? getCurveData(survStats) : [];
-                return (
-                  <div style={{marginTop:4, borderTop:`1px solid ${C.border}`, paddingTop:12}}>
-                    <button
-                      onClick={() => setShowCurve(s => !s)}
-                      style={{width:"100%", background:"transparent", border:"none",
-                        display:"flex", justifyContent:"space-between", alignItems:"center",
-                        cursor:"pointer", padding:0}}>
-                      <div>
-                        <span style={{color:C.textDim, fontSize:11, letterSpacing:1.5,
-                          display:"block", marginBottom:3}}>EFFECTIVE HP</span>
-                        <span style={{color:C.gold, fontSize:18, fontWeight:700}}>
-                          {effective_hp.toLocaleString()}
-                        </span>
-                      </div>
-                      <span style={{color:C.textDim, fontSize:13}}>
-                        {showCurve ? "▲ Hide curve" : "▼ Show curve"}
-                      </span>
-                    </button>
-
-                    {showCurve && (
-                      <div style={{marginTop:14}}>
-                        <p style={{color:C.textDim, fontSize:11, letterSpacing:1, margin:"0 0 8px"}}>
-                          EFFECTIVE HP BY HIT SIZE
-                        </p>
-                        <ResponsiveContainer width="100%" height={180}>
-                          <LineChart data={curveData}
-                            margin={{top:4, right:8, left:8, bottom:4}}>
-                            <CartesianGrid strokeDasharray="3 3" stroke={C.border} fill="transparent"/>
-                            <XAxis dataKey="hit"
-                              tick={{fill:C.textDim, fontSize:10}}
-                              tickLine={false}
-                              axisLine={{stroke:C.border}}
-                            />
-                            <YAxis
-                              tick={{fill:C.textDim, fontSize:10}}
-                              tickLine={false}
-                              axisLine={{stroke:C.border}}
-                              tickFormatter={v => v >= 1000 ? `${Math.round(v/1000)}k` : v}
-                              width={36}
-                            />
-                            <Tooltip
-                              cursor={{stroke: C.border, strokeWidth: 1}}
-                              contentStyle={{background:C.surface, border:`1px solid ${C.border}`,
-                                borderRadius:8, color:C.text, fontSize:12}}
-                              formatter={(value) => [value.toLocaleString(), "Effective HP"]}
-                              labelFormatter={(label) => `Hit size: ${label}`}
-                            />
-                            <Line type="monotone" dataKey="effectiveHP"
-                              stroke={C.gold} strokeWidth={2}
-                              dot={{fill:C.gold, r:3}} activeDot={{r:5}}
-                            />
-                          </LineChart>
-                        </ResponsiveContainer>
-                        <p style={{color:C.textDim, fontSize:10, margin:"8px 0 0",
-                          lineHeight:1.6, textAlign:"center"}}>
-                          Assumes optimal rune usage · {Math.round(survStats.effective_charges * 10) / 10} effective rune charges · Armor value flat reduction
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* DPS Curve — collapsible under damage stats */}
+              {/* DPS Curve — collapsible, between Damage Stats and Survivability */}
               {(() => {
                 const { field_DPS, single_zap } = scoreCombo(w, a, e, getSkills());
                 const curveData = showDPSCurve ? getDPSCurveData(field_DPS, single_zap) : [];
@@ -809,7 +713,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
                       onClick={() => setShowDPSCurve(s => !s)}
                       style={{width:"100%", background:"transparent", border:"none",
                         display:"flex", justifyContent:"space-between", alignItems:"center",
-                        cursor:"pointer", padding:0}}>
+                        cursor:"pointer", padding:0, textAlign:"left"}}>
                       <div>
                         <span style={{color:C.textDim, fontSize:11, letterSpacing:1.5,
                           display:"block", marginBottom:3}}>FIELD DPS</span>
@@ -875,6 +779,103 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
                   </div>
                 );
               })()}
+
+              {/* Survivability */}
+              {(() => {
+                const sv = getSurvivabilityStats(w, a, e, equippedArmor);
+                const statRows = [
+                  { label:"Total Health",         value: Math.round(sv.total_health).toLocaleString() },
+                  { label:"Armor Value",          value: sv.total_armor_value > 0 ? String(sv.total_armor_value) : null },
+                  { label:"Block Rate",           value: sv.total_block_rate > 0 ? `${Math.round(sv.total_block_rate * 10)/10}%` : null },
+                  { label:"Block Dmg Reduction",  value: sv.total_block_dr > 0 ? String(sv.total_block_dr) : null },
+                  { label:"Dodge Rate",           value: sv.total_dodge_rate > 0 ? `${sv.total_dodge_rate}%` : null },
+                  { label:"Rune Charges",         value: `${Math.round(sv.effective_charges * 10)/10}` },
+                  { label:"Health/s (Respire)",   value: sv.gear_respire > 0 ? String(sv.gear_respire) : null },
+                  { label:"Health on Kill",       value: sv.gear_health_on_kill > 0 ? String(sv.gear_health_on_kill) : null },
+                ].filter(r => r.value !== null);
+                return (
+                  <div>
+                    <p style={{color:C.textDim, margin:"0 0 10px", fontSize:11, letterSpacing:1.5}}>{equippedArmor ? "SURVIVABILITY (INCL. ARMOR)" : "SURVIVABILITY (EXCL. ARMOR)"}</p>
+                    <div style={{display:"flex", flexDirection:"column", gap:8}}>
+                      {statRows.map(r => (
+                        <div key={r.label} style={{display:"flex", justifyContent:"space-between", fontSize:13}}>
+                          <span style={{color:C.text}}>{r.label}</span>
+                          <span style={{color:C.gold}}>{r.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Effective HP + curve */}
+              {(() => {
+                const survStats = getSurvivabilityStats(w, a, e, equippedArmor);
+                const { effective_hp } = computeEffectiveHP(survStats);
+                const curveData = showCurve ? getCurveData(survStats) : [];
+                return (
+                  <div style={{marginTop:4, borderTop:`1px solid ${C.border}`, paddingTop:12}}>
+                    <button
+                      onClick={() => setShowCurve(s => !s)}
+                      style={{width:"100%", background:"transparent", border:"none",
+                        display:"flex", justifyContent:"space-between", alignItems:"center",
+                        cursor:"pointer", padding:0, textAlign:"left"}}>
+                      <div>
+                        <span style={{color:C.textDim, fontSize:11, letterSpacing:1.5,
+                          display:"block", marginBottom:3}}>EFFECTIVE HP</span>
+                        <span style={{color:C.gold, fontSize:18, fontWeight:700}}>
+                          {effective_hp.toLocaleString()}
+                        </span>
+                      </div>
+                      <span style={{color:C.textDim, fontSize:13}}>
+                        {showCurve ? "▲ Hide curve" : "▼ Show curve"}
+                      </span>
+                    </button>
+
+                    {showCurve && (
+                      <div style={{marginTop:14}}>
+                        <p style={{color:C.textDim, fontSize:11, letterSpacing:1, margin:"0 0 8px"}}>
+                          EFFECTIVE HP BY HIT SIZE
+                        </p>
+                        <ResponsiveContainer width="100%" height={180}>
+                          <LineChart data={curveData}
+                            margin={{top:4, right:8, left:8, bottom:4}}>
+                            <CartesianGrid strokeDasharray="3 3" stroke={C.border} fill="transparent"/>
+                            <XAxis dataKey="hit"
+                              tick={{fill:C.textDim, fontSize:10}}
+                              tickLine={false}
+                              axisLine={{stroke:C.border}}
+                            />
+                            <YAxis
+                              tick={{fill:C.textDim, fontSize:10}}
+                              tickLine={false}
+                              axisLine={{stroke:C.border}}
+                              tickFormatter={v => v >= 1000 ? `${Math.round(v/1000)}k` : v}
+                              width={36}
+                            />
+                            <Tooltip
+                              cursor={{stroke: C.border, strokeWidth: 1}}
+                              contentStyle={{background:C.surface, border:`1px solid ${C.border}`,
+                                borderRadius:8, color:C.text, fontSize:12}}
+                              formatter={(value) => [value.toLocaleString(), "Effective HP"]}
+                              labelFormatter={(label) => `Hit size: ${label}`}
+                            />
+                            <Line type="monotone" dataKey="effectiveHP"
+                              stroke={C.gold} strokeWidth={2}
+                              dot={{fill:C.gold, r:3}} activeDot={{r:5}}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                        <p style={{color:C.textDim, fontSize:10, margin:"8px 0 0",
+                          lineHeight:1.6, textAlign:"center"}}>
+                          Assumes optimal rune usage · {Math.round(survStats.effective_charges * 10) / 10} effective rune charges · Armor value flat reduction
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
             </div>
           )}
         </div>
