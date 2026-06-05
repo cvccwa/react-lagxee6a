@@ -252,17 +252,24 @@ function getMask(item) {
   return m;
 }
 
-export function optimize(weapons, accessories, exclusives) {
+export function optimize(weapons, accessories, exclusives, forcedItems = {}) {
   if (!weapons.length || !accessories.length || !exclusives.length) return null;
 
   const reqs = getReqs();
   const skills = getSkills();
   const TARGET = (1 << MANDATORY_ENH.length) - 1;
 
+  // If a slot is forced, only evaluate that item for that slot
+  const wList = forcedItems.Weapon    ? weapons.filter(w => w.id === forcedItems.Weapon)    : weapons;
+  const aList = forcedItems.Accessory ? accessories.filter(a => a.id === forcedItems.Accessory) : accessories;
+  const eList = forcedItems.Exclusive ? exclusives.filter(e => e.id === forcedItems.Exclusive) : exclusives;
+
+  if (!wList.length || !aList.length || !eList.length) return null;
+
   // Pre-sort by display score for early pruning
   const prep = arr => arr.map(i => ({ ...i, _mask:getMask(i) }))
     .sort((a, b) => scoreItem(b) - scoreItem(a));
-  const [ws, as, es] = [prep(weapons), prep(accessories), prep(exclusives)];
+  const [ws, as, es] = [prep(wList), prep(aList), prep(eList)];
 
   let bestFull = null, bestFullScore = -Infinity;
   let bestPartial = null, bestPartialScore = -Infinity;
