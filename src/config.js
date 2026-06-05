@@ -104,6 +104,8 @@ export const DEFAULT_SKILLS = {
   skillDodgeRate:  0,    // Dodge Rate from skills (%)
 };
 
+export const ENRAGE_TIMER = 180; // seconds — boss enrage window
+
 export const COMBO_VERSION = 1; // increment if saved combo format changes
 
 // UI colors

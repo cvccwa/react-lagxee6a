@@ -1,15 +1,16 @@
 import './style.css';
 import { useState, useEffect, useRef } from "react";
 import {
-  LineChart, Line, XAxis, YAxis, Tooltip,
+  LineChart, Line, XAxis, YAxis, Tooltip, ReferenceLine,
   ResponsiveContainer, CartesianGrid
 } from "recharts";
 import {
   ENHANCEMENTS, BASE_ATTRS, MANDATORY_ENH, GRADES, GRADE_COLOR,
   C, typeColors, inp, sel, lbl, DEFAULT_SKILLS, COMBO_VERSION,
   BASE_BLOCK_RATE_AMULET, THOR_BASE_HEALTH, RUNIC_ARMOR_BASE_HEALTH, RUNIC_ARMOR_BASE_ARMOR,
+  ENRAGE_TIMER,
 } from "./config.js";
-import { optimize, getReqs, checkReqs, getSkills, comboEnhTotal, itemStatValue } from "./scoring.js";
+import { optimize, scoreCombo, getReqs, checkReqs, getSkills, comboEnhTotal, itemStatValue } from "./scoring.js";
 import {
   fileToBase64, scanGearCard, compressItem, decompressItem,
   fetchInventory, addInventoryItem, deleteInventoryItem, migrateInventoryToSupabase,
@@ -18,7 +19,7 @@ import {
 } from "./api.js";
 import { supabase } from "./supabase.js";
 
-const APP_VERSION = "1.3.4";
+const APP_VERSION = "1.3.5";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
@@ -566,9 +567,38 @@ function getCurveData(stats) {
   }));
 }
 
+function formatLargeNumber(n) {
+  if (n >= 1e12) return `${(n / 1e12).toFixed(1)}T`;
+  if (n >= 1e9)  return `${(n / 1e9).toFixed(1)}B`;
+  if (n >= 1e6)  return `${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3)  return `${(n / 1e3).toFixed(1)}K`;
+  return String(Math.round(n));
+}
+
+function getDPSSamplePoints(single_zap, field_DPS) {
+  const start = single_zap;
+  const end = field_DPS * ENRAGE_TIMER;
+  const logStart = Math.log10(start);
+  const logEnd = Math.log10(end);
+  const step = (logEnd - logStart) / 6;
+  return Array.from({ length: 7 }, (_, i) =>
+    Math.round(Math.pow(10, logStart + i * step))
+  );
+}
+
+function getDPSCurveData(field_DPS, single_zap) {
+  const samplePoints = getDPSSamplePoints(single_zap, field_DPS);
+  return samplePoints.map(enemyHealth => ({
+    health: formatLargeNumber(enemyHealth),
+    healthRaw: enemyHealth,
+    ttk: Math.round(enemyHealth / field_DPS * 10) / 10,
+  }));
+}
+
 function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, deleteCombo, equippedArmor}) {
   const [showBuildInfo, setShowBuildInfo] = useState(false);
   const [showCurve, setShowCurve] = useState(false);
+  const [showDPSCurve, setShowDPSCurve] = useState(false);
   const [activeTab, setActiveTab] = useState("current");
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -761,6 +791,84 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
                         <p style={{color:C.textDim, fontSize:10, margin:"8px 0 0",
                           lineHeight:1.6, textAlign:"center"}}>
                           Assumes optimal rune usage · {Math.round(survStats.effective_charges * 10) / 10} effective rune charges · Armor value flat reduction
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* DPS Curve — collapsible under damage stats */}
+              {(() => {
+                const { field_DPS, single_zap } = scoreCombo(w, a, e, getSkills());
+                const curveData = showDPSCurve ? getDPSCurveData(field_DPS, single_zap) : [];
+                const enrageHealth = Math.round(field_DPS * ENRAGE_TIMER);
+                return (
+                  <div style={{marginTop:12, borderTop:`1px solid ${C.border}`, paddingTop:12}}>
+                    <button
+                      onClick={() => setShowDPSCurve(s => !s)}
+                      style={{width:"100%", background:"transparent", border:"none",
+                        display:"flex", justifyContent:"space-between", alignItems:"center",
+                        cursor:"pointer", padding:0}}>
+                      <div>
+                        <span style={{color:C.textDim, fontSize:11, letterSpacing:1.5,
+                          display:"block", marginBottom:3}}>FIELD DPS</span>
+                        <span style={{color:C.gold, fontSize:18, fontWeight:700}}>
+                          {formatLargeNumber(Math.round(field_DPS))}
+                        </span>
+                      </div>
+                      <span style={{color:C.textDim, fontSize:13}}>
+                        {showDPSCurve ? "▲ Hide curve" : "▼ Show curve"}
+                      </span>
+                    </button>
+
+                    {showDPSCurve && (
+                      <div style={{marginTop:14}}>
+                        <p style={{color:C.textDim, fontSize:11, letterSpacing:1, margin:"0 0 8px"}}>
+                          TIME TO KILL (SECONDS)
+                        </p>
+                        <ResponsiveContainer width="100%" height={180}>
+                          <LineChart data={curveData}
+                            margin={{top:4, right:8, left:8, bottom:4}}>
+                            <CartesianGrid strokeDasharray="3 3" stroke={C.border} fill="transparent"/>
+                            <XAxis
+                              dataKey="health"
+                              tick={{fill:C.textDim, fontSize:10}}
+                              tickLine={false}
+                              axisLine={{stroke:C.border}}
+                            />
+                            <YAxis
+                              tick={{fill:C.textDim, fontSize:10}}
+                              tickLine={false}
+                              axisLine={{stroke:C.border}}
+                              tickFormatter={v => `${v}s`}
+                              width={36}
+                            />
+                            <ReferenceLine
+                              y={ENRAGE_TIMER}
+                              stroke="#f87171"
+                              strokeDasharray="4 4"
+                              label={{value:"Enrage", fill:"#f87171", fontSize:10, position:"insideTopRight"}}
+                            />
+                            <Tooltip
+                              contentStyle={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:8, color:C.text, fontSize:12}}
+                              formatter={(value) => [`${value}s`, "Time to Kill"]}
+                              labelFormatter={(label) => `Enemy HP: ${label}`}
+                              cursor={{stroke:C.border, strokeWidth:1}}
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="ttk"
+                              stroke={C.gold}
+                              strokeWidth={2}
+                              dot={{fill:C.gold, r:3}}
+                              activeDot={{r:5}}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                        <p style={{color:C.textDim, fontSize:10, margin:"8px 0 0",
+                          lineHeight:1.6, textAlign:"center"}}>
+                          Red line = 3-minute enrage timer · Start = single normal zap · End = max killable health ({formatLargeNumber(enrageHealth)})
                         </p>
                       </div>
                     )}

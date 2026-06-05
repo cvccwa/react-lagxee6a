@@ -174,8 +174,13 @@ export function scoreCombo(w, a, e, skills = null) {
   const area        = Math.pow(SKILL_LDE + lde_gear, 1.5);
 
   const field_DPS = zap_damage * zap_freq * expected_hit * tdb_factor * output * area;
+  const single_zap = zap_damage * output * tdb_factor; // normal hit, no crit/precision
 
-  return Math.round(field_DPS * 100) / 100;
+  return {
+    score: Math.round(field_DPS * 100) / 100,
+    field_DPS,
+    single_zap,
+  };
 }
 
 // ── Requirements Check ────────────────────────────────────────────────────────
@@ -265,26 +270,27 @@ export function optimize(weapons, accessories, exclusives) {
   for (const w of ws) {
     for (const a of as) {
       for (const e of es) {
-        const mask      = w._mask | a._mask | e._mask;
-        const score     = scoreCombo(w, a, e, skills);
-        const reqResult = checkReqs(w, a, e, reqs, skills);
-        const fullCov   = mask === TARGET;
+        const mask        = w._mask | a._mask | e._mask;
+        const comboResult = scoreCombo(w, a, e, skills);
+        const reqResult   = checkReqs(w, a, e, reqs, skills);
+        const fullCov     = mask === TARGET;
 
         if (fullCov && reqResult.pass) {
-          if (score > bestFullScore) {
-            bestFullScore = score;
-            bestFull = { weapon:w, accessory:a, exclusive:e, score, full:true, reqResult };
+          if (comboResult.score > bestFullScore) {
+            bestFullScore = comboResult.score;
+            bestFull = { weapon:w, accessory:a, exclusive:e, score:comboResult.score, field_DPS:comboResult.field_DPS, single_zap:comboResult.single_zap, full:true, reqResult };
           }
         } else {
           // Rank partials: coverage count first, then threshold pass, then DPS
-          const covCount  = [0,1,2,3].filter(i => mask & (1<<i)).length;
+          const covCount   = [0,1,2,3].filter(i => mask & (1<<i)).length;
           const threshPass = reqResult.pass ? 1 : 0;
-          const q = covCount * 1e12 + threshPass * 1e9 + score;
+          const q = covCount * 1e12 + threshPass * 1e9 + comboResult.score;
           if (q > bestPartialScore) {
             bestPartialScore = q;
             bestPartial = {
               weapon:w, accessory:a, exclusive:e,
-              score, full:false, coverage:covCount, reqResult
+              score:comboResult.score, field_DPS:comboResult.field_DPS, single_zap:comboResult.single_zap,
+              full:false, coverage:covCount, reqResult
             };
           }
         }
