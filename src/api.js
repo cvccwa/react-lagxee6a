@@ -207,25 +207,28 @@ export async function deleteComboFromSupabase(name) {
 export async function fetchUserConfig() {
   const { data, error } = await supabase
     .from("user_config")
-    .select("skills, reqs")
+    .select("skills, reqs, profiles")
     .single();
 
   if (error && error.code !== "PGRST116") throw new Error(error.message);
   return data || null;
 }
 
-export async function saveUserConfig(skills, reqs) {
+export async function saveUserConfig(skills, reqs, profiles = null) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
 
+  const update = {
+    user_id: user.id,
+    skills,
+    reqs,
+    updated_at: new Date().toISOString(),
+  };
+  if (profiles !== null) update.profiles = profiles;
+
   const { error } = await supabase
     .from("user_config")
-    .upsert({
-      user_id: user.id,
-      skills,
-      reqs,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: "user_id" });
+    .upsert(update, { onConflict: "user_id" });
 
   if (error) throw new Error(error.message);
 }
