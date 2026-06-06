@@ -10,7 +10,7 @@ import {
   BASE_BLOCK_RATE_AMULET, THOR_BASE_HEALTH, RUNIC_ARMOR_BASE_HEALTH, RUNIC_ARMOR_BASE_ARMOR,
   ENRAGE_TIMER,
 } from "./config.js";
-import { optimize, scoreCombo, getReqs, checkReqs, getSkills, comboEnhTotal, itemStatValue } from "./scoring.js";
+import { optimize, findDeletionCandidates, scoreCombo, getReqs, checkReqs, getSkills, comboEnhTotal, itemStatValue } from "./scoring.js";
 import {
   fileToBase64, scanGearCard, compressItem, decompressItem,
   fetchInventory, addInventoryItem, deleteInventoryItem, migrateInventoryToSupabase,
@@ -19,7 +19,7 @@ import {
 } from "./api.js";
 import { supabase } from "./supabase.js";
 
-const APP_VERSION = "1.3.7";
+const APP_VERSION = "1.3.9";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
@@ -45,7 +45,7 @@ function TypeBadge({type}) {
   return <span style={{background:tc.bg,border:`1px solid ${tc.border}`,color:tc.text,padding:"5px 12px",borderRadius:4,fontSize:13,fontWeight:700,letterSpacing:1}}>{(type||"").toUpperCase()}</span>;
 }
 
-function GearCard({item,onDelete,highlight,onSelect,selected,forced=false,onToggleForce=()=>{},readOnly=false}) {
+function GearCard({item,onDelete,highlight,onSelect,selected,forced=false,onToggleForce=()=>{},readOnly=false,deletionInfo=null}) {
   const [expanded,setExpanded] = useState(false);
   const mandatory=MANDATORY_ENH.filter(m=>item.extendedEffects?.some(e=>e.stat===m));
   return (
@@ -91,6 +91,12 @@ function GearCard({item,onDelete,highlight,onSelect,selected,forced=false,onTogg
             </div>
           )}
           {onSelect&&<button onClick={()=>onSelect(item)} style={{marginTop:12,padding:"13px 20px",background:selected?C.greenDim:"#130f00",border:`1px solid ${selected?C.green:C.gold}`,color:selected?C.green:C.gold,borderRadius:8,cursor:"pointer",fontSize:15,fontFamily:"'Courier New',monospace"}}>{selected?"✓ EQUIPPED":"➤ Equip"}</button>}
+          {deletionInfo&&(
+            <div style={{marginTop:10,marginBottom:4,padding:"8px 12px",background:"#2e0a0a",border:"1px solid #4a1010",borderRadius:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span style={{color:"#f87171",fontSize:12}}>🗑 Best possible: {deletionInfo.bestPct}% of optimal</span>
+              <span style={{color:"#884444",fontSize:11}}>Safe to delete</span>
+            </div>
+          )}
           {onDelete&&<button onClick={()=>onDelete(item.id)} style={{marginTop:12,padding:"13px 20px",background:"transparent",border:"1px solid #3a1010",color:"#884444",borderRadius:8,cursor:"pointer",fontSize:15,fontFamily:"'Courier New',monospace"}}>✕ Remove</button>}
         </div>
       )}
@@ -384,12 +390,58 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items,user,session,onSi
 
 // ── Inventory Tab ─────────────────────────────────────────────────────────────
 
-function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts,onExport,onRestoreAll,user,forced,toggleForce}) {
+const FILTER_ENHANCEMENTS = [
+  { key:"High-Voltage Field Enhancement",  label:"HVF" },
+  { key:"High-Speed Shock Enhancement",    label:"HSS" },
+  { key:"Rune Onslaught Enhancement",      label:"ROE" },
+  { key:"Lightning Domain Enhancement",    label:"LDE" },
+  { key:"Rolling Thunder Enhancement",     label:"RTE" },
+  { key:"Immortal Rune Enhancement",       label:"IRE" },
+  { key:"Ultimate Storm Enhancement",      label:"USE" },
+];
+
+const FILTER_STATS = [
+  { key:"Total Output Boost",                          label:"Total Output Boost"   },
+  { key:"Total Damage Bonus",                          label:"Total Damage Bonus"   },
+  { key:"Precision Rate",                              label:"Precision Rate"       },
+  { key:"Precision Damage",                            label:"Precision Damage"     },
+  { key:"Critical Hit Rate",                           label:"Critical Hit Rate"    },
+  { key:"Critical Damage",                             label:"Critical Damage"      },
+  { key:"Bonus Damage vs Bosses",                      label:"Boss Damage"          },
+  { key:"Bonus Damage vs Close-Range Enemies",         label:"Close-Range Damage"   },
+  { key:"Damage Bonus vs Healthy Enemies",             label:"Healthy Enemy Damage" },
+  { key:"Health",                                      label:"Health (flat)"        },
+  { key:"Percentage Health",                           label:"Health (%)"           },
+  { key:"Armor",                                       label:"Armor Value"          },
+  { key:"Block Rate",                                  label:"Block Rate"           },
+  { key:"Block Damage Reduction",                      label:"Block Dmg Reduction"  },
+  { key:"Dodge Rate",                                  label:"Dodge Rate"           },
+  { key:"Healing Rune Charge Slots",                   label:"Healing Rune Slots"   },
+  { key:"Healing Rune Cooldown Reduction",             label:"Healing Rune CDR"     },
+  { key:"Health Restored Per/s (Restorative Respire)", label:"Health/s (Respire)"   },
+  { key:"Health Restored on Kill",                     label:"Health on Kill"       },
+];
+
+function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts,onExport,onRestoreAll,user,forced,toggleForce,deletionCandidates,deletionIds,deletionRan,isAnalyzing,runDeletionAnalysis,optimResult}) {
   const [restoreText,setRestoreText] = useState("");
   const [showRestore,setShowRestore] = useState(false);
   const [restoreMsg,setRestoreMsg] = useState({text:"",ok:true});
   const [exportText,setExportText] = useState("");
   const [showExport,setShowExport] = useState(false);
+  const [filterMsg,setFilterMsg] = useState("");
+  const [showFilterPanel,setShowFilterPanel] = useState(false);
+  const [checkedFilters,setCheckedFilters] = useState(new Set());
+
+  const toggleFilter = (statName) => setCheckedFilters(prev => {
+    const next = new Set(prev);
+    if (next.has(statName)) next.delete(statName); else next.add(statName);
+    return next;
+  });
+  const clearFilters = () => setCheckedFilters(new Set());
+
+  const filteredItems = checkedFilters.size > 0
+    ? items.filter(item => [...checkedFilters].every(s => (item.extendedEffects||[]).some(e=>e.stat===s)))
+    : items;
 
   const handleExport = () => {
     const clean=allItems.map(({_score,...rest})=>rest);
@@ -433,23 +485,97 @@ function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts
 
         {/* Filter */}
         <div style={{display:"flex",gap:6,flexWrap:"nowrap",overflowX:"auto",alignItems:"center"}}>
-          {["All","Weapon","Accessory","Exclusive","Armor"].map(t=>(
+          <button onClick={()=>setFilterType("All")} style={{padding:"8px 10px",background:filterType==="All"?"#1a1200":"transparent",border:`1.5px solid ${filterType==="All"?C.gold:C.border}`,color:filterType==="All"?C.gold:C.textDim,borderRadius:8,cursor:"pointer",fontSize:13,fontFamily:"'Courier New',monospace",whiteSpace:"nowrap",flexShrink:0}}>
+            All ({items.length})
+          </button>
+          <button onClick={()=>setShowFilterPanel(s=>!s)}
+            style={{padding:"8px 10px",borderRadius:8,cursor:"pointer",fontFamily:"'Courier New',monospace",fontSize:13,fontWeight:showFilterPanel?700:400,background:showFilterPanel?"#1a1200":"transparent",border:`1.5px solid ${showFilterPanel||checkedFilters.size>0?C.gold:C.border}`,color:showFilterPanel||checkedFilters.size>0?C.gold:C.textDim,display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+            🔍
+            {checkedFilters.size>0&&<span style={{background:C.gold,color:C.bg,borderRadius:10,padding:"1px 7px",fontSize:11,fontWeight:700}}>{checkedFilters.size}</span>}
+          </button>
+          {["Weapon","Accessory","Exclusive","Armor"].map(t=>(
             <button key={t} onClick={()=>setFilterType(t)} style={{padding:"8px 10px",background:filterType===t?"#1a1200":"transparent",border:`1.5px solid ${filterType===t?C.gold:C.border}`,color:filterType===t?C.gold:C.textDim,borderRadius:8,cursor:"pointer",fontSize:13,fontFamily:"'Courier New',monospace",whiteSpace:"nowrap",flexShrink:0}}>
-              {t}{t!=="All"?` (${counts[t]??0})`:` (${items.length})`}
+              {t} ({counts[t]??0})
             </button>
           ))}
+          <button
+            onClick={() => {
+              if (!optimResult) {
+                setFilterMsg("Run the optimizer first to find deletable gear.");
+                setTimeout(() => setFilterMsg(""), 3000);
+                return;
+              }
+              if (filterType === "Deletable") {
+                setFilterType("All");
+              } else {
+                if (!deletionRan) runDeletionAnalysis();
+                setFilterType("Deletable");
+              }
+            }}
+            style={{padding:"9px 14px",borderRadius:8,cursor:"pointer",fontFamily:"'Courier New',monospace",fontSize:13,fontWeight:filterType==="Deletable"?700:400,background:filterType==="Deletable"?"#2e0a0a":"transparent",border:`1.5px solid ${filterType==="Deletable"?"#884444":C.border}`,color:filterType==="Deletable"?"#f87171":C.textDim,display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+            {isAnalyzing?<span style={{animation:"spin 1s linear infinite",display:"inline-block"}}>⚡</span>:"🗑"}
+            {isAnalyzing?"Analyzing…":"Deletable"}
+            {deletionRan&&!isAnalyzing&&(
+              <span style={{background:"#3a1010",color:"#f87171",borderRadius:10,padding:"1px 7px",fontSize:11}}>
+                {deletionCandidates.length}
+              </span>
+            )}
+          </button>
         </div>
+        {filterMsg&&<p style={{color:C.orange,fontSize:13,margin:"8px 0 0"}}>{filterMsg}</p>}
       </div>
 
-      {/* Scrollable item list */}
+      {/* Scrollable item list — filter panel lives here so it scrolls with content */}
       <div style={{flex:1,overflowY:"auto",minHeight:0}}>
-        {items.length===0?(
+        {showFilterPanel&&(
+          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px",marginBottom:10}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+              <span style={{color:C.gold,fontSize:13,fontWeight:700,letterSpacing:1.5}}>FILTER BY STAT</span>
+              {checkedFilters.size>0&&(
+                <button onClick={clearFilters} style={{background:"transparent",border:"none",color:C.textDim,fontSize:12,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>
+                  Clear all ({checkedFilters.size})
+                </button>
+              )}
+            </div>
+            <p style={{color:C.textDim,fontSize:11,margin:"0 0 14px",lineHeight:1.6}}>Items must have ALL checked stats to appear.</p>
+            <p style={{color:C.textDim,fontSize:11,letterSpacing:1.5,margin:"0 0 10px"}}>ENHANCEMENTS</p>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16}}>
+              {FILTER_ENHANCEMENTS.map(({key,label})=>{
+                const active=checkedFilters.has(key);
+                return <button key={key} onClick={()=>toggleFilter(key)} style={{padding:"7px 13px",borderRadius:8,cursor:"pointer",fontFamily:"'Courier New',monospace",fontSize:12,fontWeight:active?700:400,background:active?C.purpleDim:"transparent",border:`1.5px solid ${active?C.purpleLight:C.border}`,color:active?C.purpleLight:C.textDim}}>{label}</button>;
+              })}
+            </div>
+            <p style={{color:C.textDim,fontSize:11,letterSpacing:1.5,margin:"0 0 10px"}}>STATS</p>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+              {FILTER_STATS.map(({key,label})=>{
+                const active=checkedFilters.has(key);
+                return <button key={key} onClick={()=>toggleFilter(key)} style={{padding:"7px 13px",borderRadius:8,cursor:"pointer",fontFamily:"'Courier New',monospace",fontSize:12,fontWeight:active?700:400,background:active?"#130f00":"transparent",border:`1.5px solid ${active?C.gold:C.border}`,color:active?C.gold:C.textDim}}>{label}</button>;
+              })}
+            </div>
+          </div>
+        )}
+
+        {checkedFilters.size>0&&(
+          <p style={{color:C.textDim,fontSize:12,margin:"0 0 8px"}}>
+            {filteredItems.length} item{filteredItems.length!==1?"s":""} match{filterType!=="All"?` in ${filterType}`:""}
+          </p>
+        )}
+        {items.length===0&&filterType!=="Deletable"?(
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",color:C.textDim,textAlign:"center",padding:"0 20px"}}>
             <div style={{fontSize:64,marginBottom:18}}>⚡</div>
             <p style={{margin:"0 0 8px",fontSize:22,fontWeight:700,color:C.text}}>No gear yet</p>
             <p style={{margin:0,fontSize:16}}>Head to the ADD tab to scan or import your gear cards.</p>
           </div>
-        ):items.map(item=><GearCard key={item.id} item={item} onDelete={deleteItem} forced={forced?.[item.type]===item.id} onToggleForce={toggleForce}/>)}
+        ):filterType==="Deletable"&&deletionRan&&!isAnalyzing&&deletionCandidates.length===0?(
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",color:C.textDim,textAlign:"center",padding:"0 20px"}}>
+            <p style={{margin:0,fontSize:16}}>No deletable gear found at current threshold.</p>
+          </div>
+        ):filteredItems.map(item=>(
+          <GearCard key={item.id} item={item} onDelete={deleteItem}
+            forced={forced?.[item.type]===item.id} onToggleForce={toggleForce}
+            deletionInfo={deletionIds?.has(item.id)?deletionCandidates.find(c=>c.item.id===item.id):null}
+          />
+        ))}
       </div>
     </div>
   );
@@ -1297,6 +1423,27 @@ function BuildTab({ onSave, optimResult, session }) {
         </div>
       </div>
 
+      {/* Inventory Management */}
+      <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:"18px"}}>
+        <h3 style={{color:C.gold, margin:"0 0 8px", fontSize:15, letterSpacing:1.5}}>INVENTORY MANAGEMENT</h3>
+        <p style={{color:C.textDim, fontSize:13, margin:"0 0 16px", lineHeight:1.7}}>
+          Items whose best possible score falls below this threshold are flagged as safe to delete in the Inventory tab.
+        </p>
+        <div style={{display:"flex", alignItems:"center", gap:10}}>
+          <label style={{...lbl, marginBottom:0, flex:1, fontSize:13}}>Deletion Threshold</label>
+          <div style={{display:"flex", alignItems:"center", gap:8}}>
+            <input
+              type="number"
+              value={reqs.deletionThreshold ?? 95}
+              onChange={e => updateReq("deletionThreshold", parseFloat(e.target.value) || 95)}
+              min={50} max={99} step={1}
+              style={{...inp, width:95, textAlign:"right", padding:"11px 12px", fontSize:15}}
+            />
+            <span style={{color:C.textDim, fontSize:14, minWidth:18}}>%</span>
+          </div>
+        </div>
+      </div>
+
       {/* Save button */}
       <button onClick={saveAll} style={{width:"100%", padding:"16px 0", background:saved?C.greenDim:"#130f00", border:`2px solid ${saved?C.green:C.gold}`, borderRadius:12, color:saved?C.green:C.gold, fontWeight:700, fontSize:15, letterSpacing:2, cursor:"pointer", fontFamily:"'Courier New',monospace"}}>
         {saved ? "✓ SAVED" : "💾 SAVE BUILD CONFIG"}
@@ -1491,6 +1638,9 @@ export default function App() {
   const [forced,setForced] = useState(() => {
     try { return JSON.parse(localStorage.getItem("bh:forced") || "{}"); } catch { return {}; }
   });
+  const [deletionCandidates,setDeletionCandidates] = useState([]);
+  const [isAnalyzing,setIsAnalyzing] = useState(false);
+  const [deletionRan,setDeletionRan] = useState(false);
 
   useEffect(()=>{
     // Remove legacy keys no longer used
@@ -1733,6 +1883,7 @@ export default function App() {
     if (!added.length) return;
     setForm(blankForm(form.type));
     setOptimResult(null);
+    setDeletionCandidates([]); setDeletionRan(false);
     setFlash(true); setTimeout(()=>setFlash(false),1000);
     if (session) {
       try {
@@ -1801,11 +1952,23 @@ export default function App() {
     setItems(newItems);
     localStorage.setItem("bh:gear:v1", JSON.stringify(newItems));
     setOptimResult(null);
+    setDeletionCandidates([]); setDeletionRan(false);
     if (session) {
       deleteInventoryItem(id).catch(err =>
         console.error("[inventory] Failed to delete from Supabase:", err)
       );
     }
+  };
+
+  const runDeletionAnalysis = () => {
+    if (!optimResult) return;
+    setIsAnalyzing(true);
+    setTimeout(() => {
+      const candidates = findDeletionCandidates(items, optimResult.score, getReqs(), getSkills());
+      setDeletionCandidates(candidates);
+      setDeletionRan(true);
+      setIsAnalyzing(false);
+    }, 50);
   };
 
   const toggleForce = (item) => {
@@ -1822,6 +1985,8 @@ export default function App() {
   };
 
   const runOptimize = () => {
+    setDeletionCandidates([]);
+    setDeletionRan(false);
     const dpsResult = optimize(
       items.filter(i => i.type === "Weapon"),
       items.filter(i => i.type === "Accessory"),
@@ -1865,7 +2030,12 @@ export default function App() {
   };
 
   const counts={Weapon:items.filter(i=>i.type==="Weapon").length,Accessory:items.filter(i=>i.type==="Accessory").length,Exclusive:items.filter(i=>i.type==="Exclusive").length,Armor:items.filter(i=>i.type==="Armor").length};
-  const displayItems=(filterType==="All"?items:items.filter(i=>i.type===filterType)).slice().sort((a,b)=>b.rating-a.rating);
+  const deletionIds = new Set(deletionCandidates.map(c => c.item.id));
+  const displayItems = (() => {
+    if (filterType === "Deletable") return deletionCandidates.map(c => c.item);
+    const filtered = filterType === "All" ? items : items.filter(i => i.type === filterType);
+    return filtered.slice().sort((a,b) => b.rating - a.rating);
+  })();
 
   if(loading||authLoading) return (
     <div style={{height:"100dvh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",color:C.textDim,fontSize:16}}>Loading…</div>
@@ -1888,7 +2058,7 @@ export default function App() {
       {/* Content */}
       <div style={{flex:1,overflow:"hidden",padding:"16px 16px 0",display:"flex",flexDirection:"column",minHeight:0}}>
         {tab==="add"&&<AddTab form={form} setForm={setForm} addItem={addItem} flash={flash} onBulkImport={bulkImport} items={items} user={user} session={session} onSignIn={handleShowAuth}/>}
-        {tab==="inventory"&&<InventoryTab items={displayItems} allItems={items} filterType={filterType} setFilterType={setFilterType} deleteItem={deleteItem} counts={counts} onExport={setExportJson} onRestoreAll={restoreAll} user={user} forced={forced} toggleForce={toggleForce}/>}
+        {tab==="inventory"&&<InventoryTab items={displayItems} allItems={items} filterType={filterType} setFilterType={setFilterType} deleteItem={deleteItem} counts={counts} onExport={setExportJson} onRestoreAll={restoreAll} user={user} forced={forced} toggleForce={toggleForce} deletionCandidates={deletionCandidates} deletionIds={deletionIds} deletionRan={deletionRan} isAnalyzing={isAnalyzing} runDeletionAnalysis={runDeletionAnalysis} optimResult={optimResult}/>}
         {tab==="optimize"&&<OptimizeTab result={optimResult} runOptimize={runOptimize} counts={counts} savedCombos={savedCombos} saveCombo={saveCombo} deleteCombo={deleteCombo} forced={forced} toggleForce={toggleForce}/>}
         {tab==="build"&&<BuildTab onSave={runOptimize} optimResult={optimResult} session={session}/>}
       </div>

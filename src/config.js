@@ -82,6 +82,7 @@ export const DEFAULT_REQS = {
   tob_min:  0,
   tdb_min:  0,
   boss_min: 0,
+  deletionThreshold: 95,
 };
 
 // Default skill tree contributions (all configurable in Settings)
