@@ -198,6 +198,9 @@ function CameraCapture({ onCapture, onCancel }) {
   const [queue, setQueue] = useState([]);
   const [cameraError, setCameraError] = useState(null);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [zoomSupported, setZoomSupported] = useState(false);
+  const [zoomRange, setZoomRange] = useState({ min:1, max:5, step:0.1 });
+  const [zoomLevel, setZoomLevel] = useState(1);
 
   const stopCamera = () => {
     streamRef.current?.getTracks().forEach(t => t.stop());
@@ -214,6 +217,13 @@ function CameraCapture({ onCapture, onCancel }) {
       });
       streamRef.current = stream;
       if (videoRef.current) videoRef.current.srcObject = stream;
+      // Check hardware zoom support
+      const track = stream.getVideoTracks()[0];
+      const caps = track.getCapabilities?.() ?? {};
+      if (caps.zoom) {
+        setZoomSupported(true);
+        setZoomRange({ min:caps.zoom.min, max:Math.min(caps.zoom.max, 5), step:caps.zoom.step || 0.1 });
+      }
     } catch (err) {
       if (err.name === "NotAllowedError") {
         setCameraError("Camera permission denied. Please allow camera access or use Upload instead.");
@@ -234,6 +244,13 @@ function CameraCapture({ onCapture, onCancel }) {
       stopCamera();
     };
   }, []);
+
+  const applyZoom = (value) => {
+    setZoomLevel(value);
+    streamRef.current?.getVideoTracks()[0]
+      ?.applyConstraints({ advanced: [{ zoom: value }] })
+      .catch(() => {});
+  };
 
   const captureFrame = () => {
     if (!videoRef.current) return;
@@ -265,86 +282,136 @@ function CameraCapture({ onCapture, onCancel }) {
     onCapture(photos);
   };
 
+  // Fullscreen overlay
   return (
-    <div style={{display:"flex", flexDirection:"column", gap:12}}>
-      {cameraError && (
-        <div style={{padding:"14px", background:"#2e0a0a", border:"1px solid #4a1010", borderRadius:10, color:"#f87171", fontSize:13, lineHeight:1.6}}>
-          {cameraError}
-        </div>
-      )}
-      {!cameraError && (
-        <div style={{position:"relative", borderRadius:12, overflow:"hidden", background:"#000", aspectRatio:"4/3"}}>
-          <video ref={videoRef} autoPlay playsInline muted
-            style={{width:"100%", height:"100%", objectFit:"cover",
-              opacity:isCapturing ? 0.5 : 1, transition:"opacity 0.1s"}}
-          />
-          <div style={{position:"absolute", inset:0, background:"transparent", boxShadow:"inset 0 0 0 60px rgba(0,0,0,0.5)"}}>
-            {[
-              {top:60,  left:20,  borderTop:"3px solid",  borderLeft:"3px solid"},
-              {top:60,  right:20, borderTop:"3px solid",  borderRight:"3px solid"},
-              {bottom:60, left:20, borderBottom:"3px solid", borderLeft:"3px solid"},
-              {bottom:60, right:20, borderBottom:"3px solid", borderRight:"3px solid"},
-            ].map((s, i) => (
-              <div key={i} style={{position:"absolute", width:24, height:24, borderColor:C.gold, ...s}}/>
-            ))}
-            <p style={{position:"absolute", bottom:70, left:0, right:0, textAlign:"center",
-              color:"rgba(255,255,255,0.7)", fontSize:12, margin:0,
-              fontFamily:"'Courier New',monospace", letterSpacing:1}}>
-              POSITION GEAR CARD IN FRAME
-            </p>
+    <div style={{position:"fixed", inset:0, background:"#000", zIndex:150,
+      display:"flex", flexDirection:"column"}}>
+
+      {/* Header */}
+      <div style={{display:"flex", alignItems:"center", justifyContent:"space-between",
+        padding:"12px 16px", paddingTop:"max(12px, env(safe-area-inset-top))", flexShrink:0}}>
+        <button onClick={() => { stopCamera(); onCancel(); }}
+          style={{background:"rgba(255,255,255,0.12)", border:"none", color:"#fff",
+            borderRadius:8, padding:"8px 16px", fontSize:14, cursor:"pointer",
+            fontFamily:"'Courier New',monospace"}}>
+          ✕ Cancel
+        </button>
+        {queue.length > 0 && (
+          <span style={{background:C.gold, color:C.bg, borderRadius:12,
+            padding:"4px 14px", fontSize:13, fontWeight:700,
+            fontFamily:"'Courier New',monospace"}}>
+            {queue.length} captured
+          </span>
+        )}
+      </div>
+
+      {/* Video preview — fills remaining vertical space */}
+      <div style={{flex:1, position:"relative", overflow:"hidden"}}>
+        {cameraError ? (
+          <div style={{height:"100%", display:"flex", alignItems:"center", justifyContent:"center",
+            padding:"24px"}}>
+            <div style={{padding:"16px", background:"#2e0a0a", border:"1px solid #4a1010",
+              borderRadius:12, color:"#f87171", fontSize:14, lineHeight:1.7, textAlign:"center"}}>
+              {cameraError}
+            </div>
           </div>
-          <button onClick={captureFrame}
-            style={{position:"absolute", bottom:12, left:"50%", transform:"translateX(-50%)",
-              width:60, height:60, borderRadius:"50%", background:C.gold, border:"3px solid #fff",
-              cursor:"pointer", fontSize:24, display:"flex", alignItems:"center",
-              justifyContent:"center", boxShadow:"0 2px 12px rgba(0,0,0,0.5)"}}>
+        ) : (
+          <>
+            <video ref={videoRef} autoPlay playsInline muted
+              style={{width:"100%", height:"100%", objectFit:"cover",
+                opacity:isCapturing ? 0.4 : 1, transition:"opacity 0.1s"}}
+            />
+            {/* Portrait guide overlay */}
+            <div style={{position:"absolute", inset:0, pointerEvents:"none",
+              display:"flex", alignItems:"center", justifyContent:"center"}}>
+              {/* Vignette */}
+              <div style={{position:"absolute", inset:0, background:"rgba(0,0,0,0.4)"}}/>
+              {/* Portrait guide box — gear cards are taller than wide */}
+              <div style={{position:"relative", width:"62%", height:"72%",
+                border:`2px solid ${C.gold}`, borderRadius:6, zIndex:1}}>
+                {/* Corner marks */}
+                {[
+                  {top:-2, left:-2, borderTop:`4px solid ${C.gold}`, borderLeft:`4px solid ${C.gold}`},
+                  {top:-2, right:-2, borderTop:`4px solid ${C.gold}`, borderRight:`4px solid ${C.gold}`},
+                  {bottom:-2, left:-2, borderBottom:`4px solid ${C.gold}`, borderLeft:`4px solid ${C.gold}`},
+                  {bottom:-2, right:-2, borderBottom:`4px solid ${C.gold}`, borderRight:`4px solid ${C.gold}`},
+                ].map((s, i) => (
+                  <div key={i} style={{position:"absolute", width:20, height:20, ...s}}/>
+                ))}
+                {/* Clear the vignette inside the guide */}
+                <div style={{position:"absolute", inset:0, background:"transparent",
+                  boxShadow:"0 0 0 1000px rgba(0,0,0,0.4)", borderRadius:4}}/>
+              </div>
+              <p style={{position:"absolute", bottom:"12%", left:0, right:0,
+                textAlign:"center", color:"rgba(255,255,255,0.65)",
+                fontSize:11, margin:0, fontFamily:"'Courier New',monospace", letterSpacing:1.5,
+                zIndex:1}}>
+                ALIGN GEAR CARD IN FRAME
+              </p>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Bottom controls — always visible, never scrolled */}
+      <div style={{flexShrink:0, background:"#000", display:"flex",
+        flexDirection:"column", gap:10, padding:"12px 16px",
+        paddingBottom:"max(16px, env(safe-area-inset-bottom))"}}>
+
+        {/* Thumbnail strip */}
+        {queue.length > 0 && (
+          <div style={{display:"flex", gap:8, overflowX:"auto", paddingBottom:2}}>
+            {queue.map(item => (
+              <div key={item.id} style={{position:"relative", flexShrink:0, width:54, height:72}}>
+                <img src={item.dataUrl} alt=""
+                  style={{width:"100%", height:"100%", objectFit:"cover",
+                    borderRadius:6, border:`1.5px solid ${C.border}`}}/>
+                <button onClick={() => removeFromQueue(item.id)}
+                  style={{position:"absolute", top:-5, right:-5, width:18, height:18,
+                    borderRadius:"50%", background:"#f87171", border:"none", color:"#fff",
+                    fontSize:10, cursor:"pointer", display:"flex",
+                    alignItems:"center", justifyContent:"center", lineHeight:1}}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Zoom slider — Android Chrome only; iOS silently omitted */}
+        {zoomSupported && (
+          <div style={{display:"flex", alignItems:"center", gap:10}}>
+            <span style={{color:"rgba(255,255,255,0.45)", fontSize:12}}>1×</span>
+            <input type="range" min={zoomRange.min} max={zoomRange.max}
+              step={zoomRange.step} value={zoomLevel}
+              onChange={e => applyZoom(parseFloat(e.target.value))}
+              style={{flex:1, accentColor:C.gold, cursor:"pointer"}}/>
+            <span style={{color:C.gold, fontSize:12, minWidth:28, textAlign:"right"}}>
+              {zoomLevel.toFixed(1)}×
+            </span>
+          </div>
+        )}
+
+        {/* Shutter button */}
+        <div style={{display:"flex", justifyContent:"center"}}>
+          <button onClick={captureFrame} disabled={!!cameraError}
+            style={{width:72, height:72, borderRadius:"50%",
+              background:cameraError ? "#333" : C.gold,
+              border:"4px solid #fff", cursor:cameraError ? "not-allowed" : "pointer",
+              fontSize:28, display:"flex", alignItems:"center", justifyContent:"center",
+              boxShadow:"0 2px 16px rgba(0,0,0,0.6)"}}>
             📷
           </button>
-          {queue.length > 0 && (
-            <div style={{position:"absolute", top:12, right:12, background:C.gold, color:C.bg,
-              borderRadius:12, padding:"3px 10px", fontSize:13, fontWeight:700,
+        </div>
+
+        {/* Done button — visible as soon as first photo captured */}
+        {queue.length > 0 && (
+          <button onClick={handleDone}
+            style={{width:"100%", padding:"15px 0", background:"#130f00",
+              border:`2px solid ${C.gold}`, borderRadius:12, color:C.gold,
+              fontWeight:700, fontSize:15, cursor:"pointer",
               fontFamily:"'Courier New',monospace"}}>
-              {queue.length} captured
-            </div>
-          )}
-        </div>
-      )}
-      {queue.length > 0 && (
-        <div style={{display:"flex", gap:8, flexWrap:"wrap"}}>
-          {queue.map(item => (
-            <div key={item.id} style={{position:"relative", width:72, height:54}}>
-              <img src={item.dataUrl} alt="capture"
-                style={{width:"100%", height:"100%", objectFit:"cover",
-                  borderRadius:6, border:`1px solid ${C.border}`}}/>
-              <button onClick={() => removeFromQueue(item.id)}
-                style={{position:"absolute", top:-6, right:-6, width:20, height:20,
-                  borderRadius:"50%", background:"#f87171", border:"none", color:"#fff",
-                  fontSize:11, cursor:"pointer", display:"flex", alignItems:"center",
-                  justifyContent:"center", lineHeight:1}}>
-                ✕
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-      <div style={{display:"flex", gap:10}}>
-        <button onClick={() => { stopCamera(); onCancel(); }}
-          style={{flex:1, padding:"13px 0", background:"transparent",
-            border:`1.5px solid ${C.border}`, borderRadius:10,
-            color:C.textDim, fontSize:13, cursor:"pointer",
-            fontFamily:"'Courier New',monospace"}}>
-          Cancel
-        </button>
-        <button onClick={handleDone} disabled={queue.length === 0}
-          style={{flex:2, padding:"13px 0",
-            background:queue.length > 0 ? "#130f00" : "#0a0a0a",
-            border:`1.5px solid ${queue.length > 0 ? C.gold : C.border}`,
-            borderRadius:10, color:queue.length > 0 ? C.gold : C.textDim,
-            fontSize:14, fontWeight:700,
-            cursor:queue.length > 0 ? "pointer" : "not-allowed",
-            fontFamily:"'Courier New',monospace"}}>
-          {queue.length > 0 ? `✓ Scan ${queue.length} photo${queue.length > 1 ? "s" : ""}` : "Capture photos to continue"}
-        </button>
+            ✓ Scan {queue.length} photo{queue.length > 1 ? "s" : ""}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -357,6 +424,7 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items,user,session,onSi
   const [photos,setPhotos] = useState([]);
   const [scanning,setScanning] = useState(false);
   const [scanInput,setScanInput] = useState("camera");
+  const [cameraOpen,setCameraOpen] = useState(false);
   const fileRef = useRef(null);
 
   const setFx=(idx,field,val)=>setForm(f=>({...f,extendedEffects:f.extendedEffects.map((e,i)=>i===idx?{...e,[field]:val}:e)}));
@@ -384,6 +452,7 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items,user,session,onSi
   };
 
   const handleCameraCapture = (captured) => {
+    setCameraOpen(false);
     const mapped = captured.map(p => ({...p, preview:p.dataUrl, result:null, error:null}));
     setScanInput("upload");
     setPhotos(mapped);
@@ -461,11 +530,27 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items,user,session,onSi
             ))}
           </div>
 
-          {/* Camera view */}
+          {/* Camera view — only open on explicit tap, never auto */}
           {scanInput==="camera" && (
+            <div style={{display:"flex",flexDirection:"column",flex:1,alignItems:"center",
+              justifyContent:"center",gap:16,padding:"20px 0"}}>
+              <div style={{fontSize:72}}>📷</div>
+              <button onClick={() => setCameraOpen(true)}
+                style={{padding:"16px 36px",background:"#130f00",
+                  border:`2px solid ${C.gold}`,borderRadius:12,color:C.gold,
+                  fontWeight:700,fontSize:16,cursor:"pointer",
+                  fontFamily:"'Courier New',monospace"}}>
+                Open Camera
+              </button>
+              <p style={{color:C.textDim,fontSize:13,textAlign:"center",margin:0,lineHeight:1.6}}>
+                Camera permission is requested when you open it.
+              </p>
+            </div>
+          )}
+          {cameraOpen && (
             <CameraCapture
               onCapture={handleCameraCapture}
-              onCancel={() => setScanInput("upload")}
+              onCancel={() => setCameraOpen(false)}
             />
           )}
 
