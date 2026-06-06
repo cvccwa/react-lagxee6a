@@ -20,7 +20,7 @@ import {
 } from "./api.js";
 import { supabase } from "./supabase.js";
 
-const APP_VERSION = "1.4.1";
+const APP_VERSION = "1.4.2";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
@@ -418,6 +418,21 @@ function CameraCapture({ onCapture, onCancel }) {
   );
 }
 
+const MANUAL_SCAN_PROMPT =
+  `Read this Marvel Rivals Blood Hunt gear card. ` +
+  `If two cards appear side by side, read ONLY the LEFT (selected) card. ` +
+  `Extract ONLY the EXTENDED EFFECT rows, NOT the BASE EFFECT. ` +
+  `Return ONLY valid JSON, no markdown:\n` +
+  `{"type":"Weapon|Accessory|Exclusive|Armor","name":"gear name","rating":7018,"extendedEffects":[{"grade":"S","stat":"exact stat name","value":"+443%"}]}\n` +
+  `Stat names must exactly match one of: "Lightning Domain Enhancement", "High-Voltage Field Enhancement", ` +
+  `"High-Speed Shock Enhancement", "Rune Onslaught Enhancement", "Immortal Rune Enhancement", ` +
+  `"Ultimate Storm Enhancement", "Rolling Thunder Enhancement", "Total Damage Bonus", "Critical Hit Rate", ` +
+  `"Precision Rate", "Health", "Armor", "Dodge Rate", "Block Rate", "Total Output Boost", ` +
+  `"Percentage Health", "Critical Damage", "Precision Damage", "Block Mitigation", ` +
+  `"Healing Rune Cooldown Reduction", "Health Restored Per/s (Restorative Respire)", ` +
+  `"Bonus Damage vs Close-Range Enemies", "Bonus Damage vs Bosses", "Damage Bonus vs Healthy Enemies", ` +
+  `"Health Restored on Kill", "Healing Rune Charge Slots", "Block Damage Reduction"`;
+
 function AddTab({form,setForm,addItem,flash,onBulkImport,items,user,session,onSignIn}) {
   const [mode,setMode] = useState("scan");
   const [jsonText,setJsonText] = useState("");
@@ -426,7 +441,23 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items,user,session,onSi
   const [scanning,setScanning] = useState(false);
   const [scanInput,setScanInput] = useState("camera");
   const [cameraOpen,setCameraOpen] = useState(false);
+  const [promptCopied,setPromptCopied] = useState(false);
   const fileRef = useRef(null);
+
+  const copyPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(MANUAL_SCAN_PROMPT);
+    } catch {
+      const el = document.createElement("textarea");
+      el.value = MANUAL_SCAN_PROMPT;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+    }
+    setPromptCopied(true);
+    setTimeout(() => setPromptCopied(false), 1500);
+  };
 
   const setFx=(idx,field,val)=>setForm(f=>({...f,extendedEffects:f.extendedEffects.map((e,i)=>i===idx?{...e,[field]:val}:e)}));
 
@@ -518,7 +549,7 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items,user,session,onSi
         <div style={{display:"flex",flexDirection:"column",flex:1,gap:14,minHeight:0,overflowY:"auto"}}>
           <div style={{background:"#0d0d1f",border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 18px",flexShrink:0}}>
             <p style={{margin:"0 0 5px",color:C.gold,fontSize:17,fontWeight:700}}>📷 MULTI-PHOTO SCAN</p>
-            <p style={{margin:0,color:C.textDim,fontSize:15,lineHeight:1.8}}>Capture with your camera or select screenshots. Claude reads each card and extracts stats automatically.</p>
+            <p style={{margin:0,color:C.textDim,fontSize:15,lineHeight:1.8}}>Capture with your camera or select screenshots. Claude/Gemini reads each card and extracts stats automatically.</p>
           </div>
 
           {/* Scan input selector */}
@@ -604,7 +635,11 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items,user,session,onSi
         <div style={{display:"flex",flexDirection:"column",flex:1,gap:14}}>
           <div style={{background:"#0d0d1f",border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 18px",flexShrink:0}}>
             <p style={{margin:"0 0 5px",color:C.gold,fontSize:15,fontWeight:700}}>WORKFLOW</p>
-            <p style={{margin:0,color:C.textDim,fontSize:14,lineHeight:1.7}}>1. Send gear card photos to Claude in chat<br/>2. Claude outputs a JSON block<br/>3. Paste below and tap Import</p>
+            <p style={{margin:0,color:C.textDim,fontSize:14,lineHeight:1.7}}>1. Send gear card photos to Claude.ai or Gemini in chat<br/>2. It outputs a JSON block<br/>3. Paste below and tap Import</p>
+            <button onClick={copyPrompt} style={{width:"100%",padding:"13px 0",background:promptCopied?C.greenDim:"#130f00",border:`1.5px solid ${promptCopied?C.green:C.gold}`,borderRadius:10,color:promptCopied?C.green:C.gold,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace",marginTop:12}}>
+              {promptCopied ? "✓ Copied!" : "📋 Copy Scan Prompt"}
+            </button>
+            <p style={{color:C.textDim,fontSize:12,marginTop:8,marginBottom:0,lineHeight:1.7,textAlign:"center"}}>Send this prompt along with your gear card photos in Claude.ai or Gemini. Paste the JSON response here.</p>
           </div>
           <div style={{flex:1,display:"flex",flexDirection:"column",gap:10}}>
             <label style={{...lbl,fontSize:13}}>Paste JSON (single item or array)</label>
