@@ -20,7 +20,7 @@ import {
 } from "./api.js";
 import { supabase } from "./supabase.js";
 
-const APP_VERSION = "1.4.2";
+const APP_VERSION = "1.4.3";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
@@ -1970,6 +1970,91 @@ function DebugOverlay({ enabled }) {
 const HEADER_H = 68;
 const NAV_H = 72;
 
+const ONBOARDING_STEPS = [
+  {
+    title: "Welcome",
+    icon: "⚡",
+    content: `This app helps you find the optimal gear combination for Thor's Rune Awakening build in Blood Hunt.
+
+It evaluates hundreds of thousands of possible 3-piece gear combinations and recommends the one that maximizes your field DPS — the sustained lightning damage your Awakening Rune produces.
+
+Your Armor slot is optimized separately for maximum survivability based on the recommended DPS combo.`,
+  },
+  {
+    title: "Mandatory Enhancements",
+    icon: "🔒",
+    content: `Four enhancements are required across your Weapon, Accessory, and Exclusive — every optimal combo must include all four:
+
+⚡ High-Voltage Field Enhancement (HVF)
+⚡ High-Speed Shock Enhancement (HSS)
+⚡ Rune Onslaught Enhancement (ROE)
+⚡ Lightning Domain Enhancement (LDE)
+
+Any gear combination missing even one of these is heavily penalized in the optimizer — it won't be recommended regardless of how strong its other stats are.
+
+When scanning gear, focus on pieces that have at least one of these enhancements.`,
+  },
+  {
+    title: "Optimizer Assumptions",
+    icon: "📐",
+    content: `The optimizer makes these assumptions about your setup:
+
+• Arcane Realm is fully upgraded (Scroll of Immortality maxed)
+• You are using Legendary Runic Armor at level 60
+• Alchemy Amulet is always your Accessory slot
+• Gaea Sigil is always your Weapon slot
+• God Tempest's Wrath is always your Exclusive slot
+• Total Output Boost skill nodes are maxed
+• Endless Current is assigned (enables HVF scaling)
+• HVF, HSS, and LDE skill nodes are maxed (3/3)
+
+If your setup differs from these assumptions, the recommendations may not be optimal for your specific build.`,
+  },
+  {
+    title: "Skill Configuration",
+    icon: "🧠",
+    content: `The optimizer uses your skill tree values to score gear combinations accurately.
+
+Open the BUILD tab and enter your exact skill point allocations:
+
+DAMAGE SKILLS
+Set your Critical Hit Rate, Critical Damage, Precision Rate, Precision Damage, and Total Damage Bonus from your skill tree. Toggle Damage Specialization to match your junction choice (Precision ×200% or Crit ×150%).
+
+SURVIVABILITY SKILLS
+Enter your Flat Health, Percentage Max Health, Percentage Damage Resistance, Armor Value, Block Rate, Block Damage Reduction, and Dodge Rate from your skill tree.
+
+The more accurate your skill inputs, the more accurate the DPS scoring.`,
+  },
+  {
+    title: "Adding Gear",
+    icon: "📷",
+    content: `There are three ways to add gear to your inventory:
+
+SCAN — Take a photo of a gear card and the AI extracts all stats automatically. Requires a free API key from Anthropic (console.anthropic.com) or Google AI Studio (aistudio.google.com). Enter your key in Settings.
+
+PASTE — Send gear card photos to Claude.ai in chat using the provided prompt. Copy the JSON response and paste it here. Free — no API key needed.
+
+MANUAL — Enter gear stats by hand. Best for a small number of specific pieces.
+
+Focus on scanning gear with HVF or HSS — pieces without mandatory enhancements rarely appear in optimal builds.`,
+  },
+  {
+    title: "Reading Results",
+    icon: "📊",
+    content: `After running the optimizer, tap ℹ BUILD INFO to see the full analysis:
+
+ENHANCEMENT THRESHOLDS — Pass/fail for each mandatory enhancement and any minimums you've set.
+
+DAMAGE STATS — Your total Precision Rate, Precision Damage, Critical Hit Rate, Critical Damage, Output Boost, Damage Bonus, and Boss Damage.
+
+FIELD DPS — Your lightning field damage per second. Tap to expand the TTK curve showing time to kill vs enemy health. The red line marks the 3-minute enrage timer.
+
+SURVIVABILITY — Your combined health, armor, block, and dodge stats across all 4 slots. Tap to expand the Effective HP curve showing survivability at different boss hit sizes.
+
+✓ OPTIMAL means all thresholds are met. ⚠ BEST AVAILABLE means the optimizer couldn't find a combo meeting all your requirements — adjust thresholds or scan more gear.`,
+  },
+];
+
 export default function App() {
   const [tab,setTab] = useState("add");
   const [items,setItems] = useState([]);
@@ -1980,6 +2065,9 @@ export default function App() {
   const [flash,setFlash] = useState(false);
   const [,setExportJson] = useState("");
   const [showSettings,setShowSettings] = useState(false);
+  const [showOnboarding,setShowOnboarding] = useState(false);
+  const [onboardingStep,setOnboardingStep] = useState(0);
+  const [lastDeleted,setLastDeleted] = useState(null);
   const [debugEnabled,setDebugEnabled] = useState(() => localStorage.getItem("bh:debug") === "true");
   const [savedCombos,setSavedCombos] = useState(() => {
     try { const s=localStorage.getItem("bh:saved_combos"); return s?JSON.parse(s):[]; } catch { return []; }
@@ -2168,6 +2256,9 @@ export default function App() {
     loadKeyStatus();
   },[session]); // session change triggers full data load
 
+  // Clear pending undo timer on unmount
+  useEffect(() => () => { if (lastDeleted?.timer) clearTimeout(lastDeleted.timer); }, [lastDeleted]);
+
   // ── Key management ──────────────────────────────────────────────────────────
 
   const saveApiKey = async () => {
@@ -2331,7 +2422,11 @@ export default function App() {
     setItems(newItems); persist(newItems); setOptimResult(null);
   };
 
-  const deleteItem = async (id) => {
+  const deleteItem = (id) => {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
+
+    // Unforce the item if it was pinned
     if (Object.values(forced).includes(id)) {
       setForced(prev => {
         const next = Object.fromEntries(Object.entries(prev).filter(([,v]) => v !== id));
@@ -2339,16 +2434,43 @@ export default function App() {
         return next;
       });
     }
+
+    // If there's already a pending undo, fire that delete immediately before starting a new window
+    if (lastDeleted?.timer) {
+      clearTimeout(lastDeleted.timer);
+      if (session) {
+        deleteInventoryItem(lastDeleted.item.id).catch(err =>
+          console.error("[inventory] Failed to delete from Supabase:", err)
+        );
+      }
+    }
+
     const newItems = items.filter(i => i.id !== id);
     setItems(newItems);
     localStorage.setItem("bh:gear:v1", JSON.stringify(newItems));
     setOptimResult(null);
     setDeletionCandidates([]); setDeletionRan(false);
-    if (session) {
-      deleteInventoryItem(id).catch(err =>
-        console.error("[inventory] Failed to delete from Supabase:", err)
-      );
-    }
+
+    // Delay Supabase delete — give user 4s to undo
+    const timer = setTimeout(async () => {
+      if (session) {
+        try { await deleteInventoryItem(id); } catch (err) {
+          console.error("[inventory] Failed to delete from Supabase:", err);
+        }
+      }
+      setLastDeleted(null);
+    }, 4000);
+
+    setLastDeleted({ item, timer });
+  };
+
+  const handleUndoDelete = () => {
+    if (!lastDeleted) return;
+    clearTimeout(lastDeleted.timer);
+    const restored = [lastDeleted.item, ...items];
+    setItems(restored);
+    localStorage.setItem("bh:gear:v1", JSON.stringify(restored));
+    setLastDeleted(null);
   };
 
   const onProfileSwitch = (newIdx, newProfile) => {
@@ -2453,7 +2575,10 @@ export default function App() {
           <h1 style={{margin:0,fontSize:15,fontWeight:900,color:C.gold,letterSpacing:0.5,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>BLOOD HUNT ⚡ GEAR OPTIMIZER</h1>
           <p style={{margin:0,fontSize:11,color:C.textDim,letterSpacing:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Thor · Rune Awakening</p>
         </div>
-        <button onClick={()=>setShowSettings(true)} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.textDim,borderRadius:10,padding:"10px 12px",cursor:"pointer",fontSize:22,lineHeight:1,flexShrink:0}}>⚙</button>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexShrink:0}}>
+          <button onClick={()=>{setOnboardingStep(0);setShowOnboarding(true);}} style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:"50%",width:34,height:34,color:C.textDim,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>?</button>
+          <button onClick={()=>setShowSettings(true)} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.textDim,borderRadius:10,padding:"10px 12px",cursor:"pointer",fontSize:22,lineHeight:1}}>⚙</button>
+        </div>
       </div>
 
       {/* Content */}
@@ -2463,6 +2588,14 @@ export default function App() {
         {tab==="optimize"&&<OptimizeTab result={optimResult} runOptimize={runOptimize} counts={counts} savedCombos={savedCombos} saveCombo={saveCombo} deleteCombo={deleteCombo} forced={forced} toggleForce={toggleForce}/>}
         {tab==="build"&&<BuildTab key={activeProfile} session={session} profiles={profiles} setProfiles={setProfiles} activeProfile={activeProfile} onProfileSwitch={onProfileSwitch}/>}
       </div>
+
+      {/* Undo delete toast */}
+      {lastDeleted&&(
+        <div style={{position:"fixed",bottom:70,left:"50%",transform:"translateX(-50%)",zIndex:100,background:"#1a1a2e",border:`1px solid ${C.border}`,borderRadius:12,padding:"12px 16px",display:"flex",alignItems:"center",gap:14,boxShadow:"0 4px 20px rgba(0,0,0,0.5)",minWidth:260,maxWidth:"calc(100vw - 32px)"}}>
+          <span style={{color:C.text,fontSize:13,flex:1}}>{lastDeleted.item.name} deleted</span>
+          <button onClick={handleUndoDelete} style={{background:"transparent",border:`1.5px solid ${C.gold}`,borderRadius:8,padding:"6px 14px",color:C.gold,fontWeight:700,fontSize:13,cursor:"pointer",fontFamily:"'Courier New',monospace",flexShrink:0}}>Undo</button>
+        </div>
+      )}
 
       {/* Bottom nav */}
       <div style={{height:NAV_H,flexShrink:0,background:"#07070e",borderTop:`2px solid ${C.border}`,display:"flex",paddingBottom:"env(safe-area-inset-bottom)"}}>
@@ -2507,6 +2640,44 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* Onboarding modal */}
+      {showOnboarding&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:200,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"0 16px"}}>
+          <div style={{width:"100%",maxWidth:420,background:C.surface,border:`1px solid ${C.border}`,borderRadius:20,overflow:"hidden"}}>
+            {/* Header */}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 20px",borderBottom:`1px solid ${C.border}`}}>
+              <span style={{color:C.textDim,fontSize:12,letterSpacing:1.5}}>{onboardingStep+1} OF {ONBOARDING_STEPS.length}</span>
+              <button onClick={()=>setShowOnboarding(false)} style={{background:"transparent",border:"none",color:C.textDim,fontSize:20,cursor:"pointer",lineHeight:1,padding:"0 4px"}}>×</button>
+            </div>
+            {/* Content */}
+            <div style={{padding:"24px 20px",overflowY:"auto",maxHeight:"60vh"}}>
+              <div style={{fontSize:40,textAlign:"center",marginBottom:16}}>{ONBOARDING_STEPS[onboardingStep].icon}</div>
+              <h2 style={{color:C.gold,fontSize:20,fontWeight:700,margin:"0 0 16px",textAlign:"center",fontFamily:"'Courier New',monospace",letterSpacing:1.5}}>{ONBOARDING_STEPS[onboardingStep].title.toUpperCase()}</h2>
+              <p style={{color:C.text,fontSize:14,lineHeight:1.8,margin:0,whiteSpace:"pre-line"}}>{ONBOARDING_STEPS[onboardingStep].content}</p>
+            </div>
+            {/* Dot indicators */}
+            <div style={{display:"flex",justifyContent:"center",gap:6,padding:"0 20px 16px"}}>
+              {ONBOARDING_STEPS.map((_,i)=>(
+                <div key={i} onClick={()=>setOnboardingStep(i)} style={{width:i===onboardingStep?20:8,height:8,borderRadius:4,background:i===onboardingStep?C.gold:C.border,cursor:"pointer",transition:"width 0.2s, background 0.2s"}}/>
+              ))}
+            </div>
+            {/* Navigation */}
+            <div style={{display:"flex",gap:10,padding:"0 20px 20px"}}>
+              {onboardingStep>0?(
+                <button onClick={()=>setOnboardingStep(s=>s-1)} style={{flex:1,padding:"13px 0",background:"transparent",border:`1.5px solid ${C.border}`,borderRadius:10,color:C.textDim,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>← Back</button>
+              ):(
+                <div style={{flex:1}}/>
+              )}
+              {onboardingStep<ONBOARDING_STEPS.length-1?(
+                <button onClick={()=>setOnboardingStep(s=>s+1)} style={{flex:2,padding:"13px 0",background:"#130f00",border:`1.5px solid ${C.gold}`,borderRadius:10,color:C.gold,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>Next →</button>
+              ):(
+                <button onClick={()=>setShowOnboarding(false)} style={{flex:2,padding:"13px 0",background:C.greenDim,border:`1.5px solid ${C.green}`,borderRadius:10,color:C.green,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>✓ Got it</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <Analytics />
     </div>
   );
