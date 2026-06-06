@@ -306,3 +306,54 @@ export function optimize(weapons, accessories, exclusives, forcedItems = {}) {
   }
   return bestFull || bestPartial;
 }
+
+export function findDeletionCandidates(items, optimalScore, reqs, skills) {
+  if (!optimalScore || optimalScore <= 0) return [];
+
+  const threshold = (reqs.deletionThreshold ?? 95) / 100;
+  const weapons     = items.filter(i => i.type === "Weapon");
+  const accessories = items.filter(i => i.type === "Accessory");
+  const exclusives  = items.filter(i => i.type === "Exclusive");
+
+  const candidates = [];
+
+  for (const item of items) {
+    if (item.type === "Armor") continue;
+
+    let bestScore = 0;
+
+    if (item.type === "Weapon") {
+      for (const a of accessories) {
+        for (const e of exclusives) {
+          const s = scoreCombo(item, a, e, skills).score;
+          if (s > bestScore) bestScore = s;
+        }
+      }
+    } else if (item.type === "Accessory") {
+      for (const w of weapons) {
+        for (const e of exclusives) {
+          const s = scoreCombo(w, item, e, skills).score;
+          if (s > bestScore) bestScore = s;
+        }
+      }
+    } else if (item.type === "Exclusive") {
+      for (const w of weapons) {
+        for (const a of accessories) {
+          const s = scoreCombo(w, a, item, skills).score;
+          if (s > bestScore) bestScore = s;
+        }
+      }
+    }
+
+    const bestPct = bestScore / optimalScore;
+    if (bestPct < threshold) {
+      candidates.push({
+        item,
+        bestScore,
+        bestPct: Math.round(bestPct * 1000) / 10,
+      });
+    }
+  }
+
+  return candidates.sort((a, b) => a.bestPct - b.bestPct);
+}
