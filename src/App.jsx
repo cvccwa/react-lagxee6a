@@ -1,5 +1,6 @@
 import './style.css';
 import { useState, useEffect, useRef } from "react";
+import { Analytics } from '@vercel/analytics/react';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ReferenceLine,
   ResponsiveContainer, CartesianGrid
@@ -2459,6 +2460,7 @@ export default function App() {
           </div>
         </div>
       )}
+      <Analytics />
     </div>
   );
 }
