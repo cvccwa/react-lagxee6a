@@ -485,9 +485,17 @@ function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts
 
         {/* Filter */}
         <div style={{display:"flex",gap:6,flexWrap:"nowrap",overflowX:"auto",alignItems:"center"}}>
-          {["All","Weapon","Accessory","Exclusive","Armor"].map(t=>(
+          <button onClick={()=>setFilterType("All")} style={{padding:"8px 10px",background:filterType==="All"?"#1a1200":"transparent",border:`1.5px solid ${filterType==="All"?C.gold:C.border}`,color:filterType==="All"?C.gold:C.textDim,borderRadius:8,cursor:"pointer",fontSize:13,fontFamily:"'Courier New',monospace",whiteSpace:"nowrap",flexShrink:0}}>
+            All ({items.length})
+          </button>
+          <button onClick={()=>setShowFilterPanel(s=>!s)}
+            style={{padding:"8px 10px",borderRadius:8,cursor:"pointer",fontFamily:"'Courier New',monospace",fontSize:13,fontWeight:showFilterPanel?700:400,background:showFilterPanel?"#1a1200":"transparent",border:`1.5px solid ${showFilterPanel||checkedFilters.size>0?C.gold:C.border}`,color:showFilterPanel||checkedFilters.size>0?C.gold:C.textDim,display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+            🔍
+            {checkedFilters.size>0&&<span style={{background:C.gold,color:C.bg,borderRadius:10,padding:"1px 7px",fontSize:11,fontWeight:700}}>{checkedFilters.size}</span>}
+          </button>
+          {["Weapon","Accessory","Exclusive","Armor"].map(t=>(
             <button key={t} onClick={()=>setFilterType(t)} style={{padding:"8px 10px",background:filterType===t?"#1a1200":"transparent",border:`1.5px solid ${filterType===t?C.gold:C.border}`,color:filterType===t?C.gold:C.textDim,borderRadius:8,cursor:"pointer",fontSize:13,fontFamily:"'Courier New',monospace",whiteSpace:"nowrap",flexShrink:0}}>
-              {t}{t!=="All"?` (${counts[t]??0})`:` (${items.length})`}
+              {t} ({counts[t]??0})
             </button>
           ))}
           <button
@@ -514,52 +522,44 @@ function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts
             )}
           </button>
         </div>
-          {/* Filter panel toggle */}
-          <button onClick={()=>setShowFilterPanel(s=>!s)}
-            style={{padding:"9px 12px",borderRadius:8,cursor:"pointer",fontFamily:"'Courier New',monospace",fontSize:13,background:checkedFilters.size>0?"#0a0f1a":"transparent",border:`1.5px solid ${checkedFilters.size>0?C.gold:C.border}`,color:checkedFilters.size>0?C.gold:C.textDim,display:"flex",alignItems:"center",gap:6,marginLeft:"auto",flexShrink:0}}>
-            🔍
-            {checkedFilters.size>0&&<span style={{background:C.gold,color:C.bg,borderRadius:10,padding:"1px 7px",fontSize:11,fontWeight:700}}>{checkedFilters.size}</span>}
-          </button>
         {filterMsg&&<p style={{color:C.orange,fontSize:13,margin:"8px 0 0"}}>{filterMsg}</p>}
       </div>
 
-      {/* Stat filter panel */}
-      {showFilterPanel&&(
-        <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px",flexShrink:0}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-            <span style={{color:C.gold,fontSize:13,fontWeight:700,letterSpacing:1.5}}>FILTER BY STAT</span>
-            {checkedFilters.size>0&&(
-              <button onClick={clearFilters} style={{background:"transparent",border:"none",color:C.textDim,fontSize:12,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>
-                Clear all ({checkedFilters.size})
-              </button>
-            )}
-          </div>
-          <p style={{color:C.textDim,fontSize:11,margin:"0 0 14px",lineHeight:1.6}}>Items must have ALL checked stats to appear.</p>
-          <p style={{color:C.textDim,fontSize:11,letterSpacing:1.5,margin:"0 0 10px"}}>ENHANCEMENTS</p>
-          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16}}>
-            {FILTER_ENHANCEMENTS.map(({key,label})=>{
-              const active=checkedFilters.has(key);
-              return <button key={key} onClick={()=>toggleFilter(key)} style={{padding:"7px 13px",borderRadius:8,cursor:"pointer",fontFamily:"'Courier New',monospace",fontSize:12,fontWeight:active?700:400,background:active?C.purpleDim:"transparent",border:`1.5px solid ${active?C.purpleLight:C.border}`,color:active?C.purpleLight:C.textDim}}>{label}</button>;
-            })}
-          </div>
-          <p style={{color:C.textDim,fontSize:11,letterSpacing:1.5,margin:"0 0 10px"}}>STATS</p>
-          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
-            {FILTER_STATS.map(({key,label})=>{
-              const active=checkedFilters.has(key);
-              return <button key={key} onClick={()=>toggleFilter(key)} style={{padding:"7px 13px",borderRadius:8,cursor:"pointer",fontFamily:"'Courier New',monospace",fontSize:12,fontWeight:active?700:400,background:active?"#130f00":"transparent",border:`1.5px solid ${active?C.gold:C.border}`,color:active?C.gold:C.textDim}}>{label}</button>;
-            })}
-          </div>
-        </div>
-      )}
-
-      {checkedFilters.size>0&&(
-        <p style={{color:C.textDim,fontSize:12,margin:"0",flexShrink:0}}>
-          {filteredItems.length} item{filteredItems.length!==1?"s":""} match{filterType!=="All"?` in ${filterType}`:""}
-        </p>
-      )}
-
-      {/* Scrollable item list */}
+      {/* Scrollable item list — filter panel lives here so it scrolls with content */}
       <div style={{flex:1,overflowY:"auto",minHeight:0}}>
+        {showFilterPanel&&(
+          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px",marginBottom:10}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+              <span style={{color:C.gold,fontSize:13,fontWeight:700,letterSpacing:1.5}}>FILTER BY STAT</span>
+              {checkedFilters.size>0&&(
+                <button onClick={clearFilters} style={{background:"transparent",border:"none",color:C.textDim,fontSize:12,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>
+                  Clear all ({checkedFilters.size})
+                </button>
+              )}
+            </div>
+            <p style={{color:C.textDim,fontSize:11,margin:"0 0 14px",lineHeight:1.6}}>Items must have ALL checked stats to appear.</p>
+            <p style={{color:C.textDim,fontSize:11,letterSpacing:1.5,margin:"0 0 10px"}}>ENHANCEMENTS</p>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16}}>
+              {FILTER_ENHANCEMENTS.map(({key,label})=>{
+                const active=checkedFilters.has(key);
+                return <button key={key} onClick={()=>toggleFilter(key)} style={{padding:"7px 13px",borderRadius:8,cursor:"pointer",fontFamily:"'Courier New',monospace",fontSize:12,fontWeight:active?700:400,background:active?C.purpleDim:"transparent",border:`1.5px solid ${active?C.purpleLight:C.border}`,color:active?C.purpleLight:C.textDim}}>{label}</button>;
+              })}
+            </div>
+            <p style={{color:C.textDim,fontSize:11,letterSpacing:1.5,margin:"0 0 10px"}}>STATS</p>
+            <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+              {FILTER_STATS.map(({key,label})=>{
+                const active=checkedFilters.has(key);
+                return <button key={key} onClick={()=>toggleFilter(key)} style={{padding:"7px 13px",borderRadius:8,cursor:"pointer",fontFamily:"'Courier New',monospace",fontSize:12,fontWeight:active?700:400,background:active?"#130f00":"transparent",border:`1.5px solid ${active?C.gold:C.border}`,color:active?C.gold:C.textDim}}>{label}</button>;
+              })}
+            </div>
+          </div>
+        )}
+
+        {checkedFilters.size>0&&(
+          <p style={{color:C.textDim,fontSize:12,margin:"0 0 8px"}}>
+            {filteredItems.length} item{filteredItems.length!==1?"s":""} match{filterType!=="All"?` in ${filterType}`:""}
+          </p>
+        )}
         {items.length===0&&filterType!=="Deletable"?(
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",color:C.textDim,textAlign:"center",padding:"0 20px"}}>
             <div style={{fontSize:64,marginBottom:18}}>⚡</div>
