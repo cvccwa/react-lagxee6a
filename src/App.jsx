@@ -6,7 +6,7 @@ import {
 } from "recharts";
 import {
   ENHANCEMENTS, BASE_ATTRS, MANDATORY_ENH, GRADES, GRADE_COLOR,
-  C, typeColors, inp, sel, lbl, DEFAULT_SKILLS, COMBO_VERSION,
+  C, typeColors, inp, sel, lbl, DEFAULT_SKILLS, DEFAULT_REQS, COMBO_VERSION,
   BASE_BLOCK_RATE_AMULET, THOR_BASE_HEALTH, RUNIC_ARMOR_BASE_HEALTH, RUNIC_ARMOR_BASE_ARMOR,
   ENRAGE_TIMER,
 } from "./config.js";
@@ -19,7 +19,7 @@ import {
 } from "./api.js";
 import { supabase } from "./supabase.js";
 
-const APP_VERSION = "1.4.0";
+const APP_VERSION = "1.4.1";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
@@ -1540,25 +1540,37 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
 
 // ── Build Tab ─────────────────────────────────────────────────────────────────
 
-function BuildTab({ onSave, optimResult, session }) {
+function BuildTab({ session, profiles, setProfiles, activeProfile, onProfileSwitch }) {
   const [reqs, setReqs] = useState(() => getReqs());
   const [skills, setSkills] = useState(() => getSkills());
-  const [saved, setSaved] = useState(false);
+  const [profileDirty, setProfileDirty] = useState(false);
+  const [savedFeedback, setSavedFeedback] = useState(false);
 
-  const updateReq = (k, v) => setReqs(r => ({...r, [k]: parseFloat(v) || 0}));
-  const updateSkill = (k, v) => setSkills(s => ({...s, [k]: v}));
+  const updateReq = (k, v) => { setReqs(r => ({...r, [k]: parseFloat(v) || 0})); setProfileDirty(true); };
+  const updateSkill = (k, v) => { setSkills(s => ({...s, [k]: v})); setProfileDirty(true); };
 
-  const saveAll = () => {
+  const saveProfile = () => {
     localStorage.setItem("bh:reqs", JSON.stringify(reqs));
     localStorage.setItem("bh:skills", JSON.stringify(skills));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
-    if (onSave && optimResult) onSave();
+    const updatedProfiles = profiles.map((p, i) =>
+      i === activeProfile ? { index: i, skills, reqs } : p
+    );
+    setProfiles(updatedProfiles);
+    setProfileDirty(false);
+    setSavedFeedback(true);
+    setTimeout(() => setSavedFeedback(false), 1500);
     if (session) {
-      saveUserConfig(skills, reqs).catch(err =>
+      saveUserConfig(skills, reqs, updatedProfiles).catch(err =>
         console.error("[config] Failed to sync to Supabase:", err)
       );
     }
+  };
+
+  const switchProfile = (newIdx) => {
+    const target = profiles[newIdx];
+    if (!target) return;
+    onProfileSwitch(newIdx, target);
+    // profileDirty resets because BuildTab remounts via key={activeProfile}
   };
 
   return (
@@ -1719,10 +1731,34 @@ function BuildTab({ onSave, optimResult, session }) {
         </div>
       </div>
 
-      {/* Save button */}
-      <button onClick={saveAll} style={{width:"100%", padding:"16px 0", background:saved?C.greenDim:"#130f00", border:`2px solid ${saved?C.green:C.gold}`, borderRadius:12, color:saved?C.green:C.gold, fontWeight:700, fontSize:15, letterSpacing:2, cursor:"pointer", fontFamily:"'Courier New',monospace"}}>
-        {saved ? "✓ SAVED" : "💾 SAVE BUILD CONFIG"}
-      </button>
+      {/* Profile switcher */}
+      <div style={{display:"flex", gap:10}}>
+        {[0, 1].map(idx => {
+          const isActive = idx === activeProfile;
+          const isDirtyActive = isActive && profileDirty;
+          const isSaved = isActive && savedFeedback;
+          return (
+            <button key={idx}
+              onClick={() => isActive ? (isDirtyActive ? saveProfile() : null) : switchProfile(idx)}
+              style={{
+                flex:1, padding:"16px 0",
+                background: isSaved ? C.greenDim : isActive ? "#130f00" : "transparent",
+                border:`2px solid ${isSaved ? C.green : isActive ? C.gold : C.border}`,
+                borderRadius:12,
+                color: isSaved ? C.green : isActive ? C.gold : C.textDim,
+                fontWeight:700, fontSize:13, letterSpacing:1.5,
+                cursor: isActive && !isDirtyActive ? "default" : "pointer",
+                fontFamily:"'Courier New',monospace",
+              }}>
+              {isSaved
+                ? "✓ SAVED"
+                : isDirtyActive
+                  ? `💾 SAVE PROFILE ${idx + 1}`
+                  : `PROFILE ${idx + 1}`}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -1913,6 +1949,10 @@ export default function App() {
   const [forced,setForced] = useState(() => {
     try { return JSON.parse(localStorage.getItem("bh:forced") || "{}"); } catch { return {}; }
   });
+  const [activeProfile,setActiveProfile] = useState(
+    () => parseInt(localStorage.getItem("bh:activeProfile") || "0")
+  );
+  const [profiles,setProfiles] = useState([null, null]);
   const [deletionCandidates,setDeletionCandidates] = useState([]);
   const [isAnalyzing,setIsAnalyzing] = useState(false);
   const [deletionRan,setDeletionRan] = useState(false);
@@ -2018,11 +2058,39 @@ export default function App() {
         if (config.reqs && Object.keys(config.reqs).length > 0) {
           localStorage.setItem("bh:reqs", JSON.stringify(config.reqs));
         }
+
+        // Load profiles
+        const savedProfiles = config.profiles;
+        if (Array.isArray(savedProfiles) && savedProfiles.length === 2) {
+          setProfiles(savedProfiles);
+          // Load the active profile into working state
+          const activeIdx = parseInt(localStorage.getItem("bh:activeProfile") || "0");
+          const activeP = savedProfiles[activeIdx];
+          if (activeP) {
+            localStorage.setItem("bh:skills", JSON.stringify(activeP.skills));
+            localStorage.setItem("bh:reqs", JSON.stringify(activeP.reqs));
+          }
+        } else {
+          // First time with profiles — initialize from current working state
+          const curSkills = JSON.parse(localStorage.getItem("bh:skills") || "{}");
+          const curReqs = JSON.parse(localStorage.getItem("bh:reqs") || "{}");
+          const initialProfiles = [
+            { index: 0, skills: Object.keys(curSkills).length > 0 ? curSkills : {...DEFAULT_SKILLS}, reqs: Object.keys(curReqs).length > 0 ? curReqs : {...DEFAULT_REQS} },
+            { index: 1, skills: {...DEFAULT_SKILLS}, reqs: {...DEFAULT_REQS} },
+          ];
+          setProfiles(initialProfiles);
+          saveUserConfig(curSkills, curReqs, initialProfiles).catch(() => {});
+        }
       } else {
         const localSkills = JSON.parse(localStorage.getItem("bh:skills") || "{}");
         const localReqs = JSON.parse(localStorage.getItem("bh:reqs") || "{}");
+        const initialProfiles = [
+          { index: 0, skills: Object.keys(localSkills).length > 0 ? localSkills : {...DEFAULT_SKILLS}, reqs: Object.keys(localReqs).length > 0 ? localReqs : {...DEFAULT_REQS} },
+          { index: 1, skills: {...DEFAULT_SKILLS}, reqs: {...DEFAULT_REQS} },
+        ];
+        setProfiles(initialProfiles);
         if (Object.keys(localSkills).length > 0 || Object.keys(localReqs).length > 0) {
-          await saveUserConfig(localSkills, localReqs);
+          await saveUserConfig(localSkills, localReqs, initialProfiles);
         }
       }
     } catch (err) {
@@ -2235,6 +2303,16 @@ export default function App() {
     }
   };
 
+  const onProfileSwitch = (newIdx, newProfile) => {
+    // Write new profile into working state BEFORE updating activeProfile
+    // (BuildTab remounts via key and reads fresh from localStorage)
+    localStorage.setItem("bh:skills", JSON.stringify(newProfile.skills));
+    localStorage.setItem("bh:reqs", JSON.stringify(newProfile.reqs));
+    localStorage.setItem("bh:activeProfile", String(newIdx));
+    setActiveProfile(newIdx);
+    setOptimResult(null);
+  };
+
   const runDeletionAnalysis = () => {
     if (!optimResult) return;
     setIsAnalyzing(true);
@@ -2335,7 +2413,7 @@ export default function App() {
         {tab==="add"&&<AddTab form={form} setForm={setForm} addItem={addItem} flash={flash} onBulkImport={bulkImport} items={items} user={user} session={session} onSignIn={handleShowAuth}/>}
         {tab==="inventory"&&<InventoryTab items={displayItems} allItems={items} filterType={filterType} setFilterType={setFilterType} deleteItem={deleteItem} counts={counts} onExport={setExportJson} onRestoreAll={restoreAll} user={user} forced={forced} toggleForce={toggleForce} deletionCandidates={deletionCandidates} deletionIds={deletionIds} deletionRan={deletionRan} isAnalyzing={isAnalyzing} runDeletionAnalysis={runDeletionAnalysis} optimResult={optimResult}/>}
         {tab==="optimize"&&<OptimizeTab result={optimResult} runOptimize={runOptimize} counts={counts} savedCombos={savedCombos} saveCombo={saveCombo} deleteCombo={deleteCombo} forced={forced} toggleForce={toggleForce}/>}
-        {tab==="build"&&<BuildTab onSave={runOptimize} optimResult={optimResult} session={session}/>}
+        {tab==="build"&&<BuildTab key={activeProfile} session={session} profiles={profiles} setProfiles={setProfiles} activeProfile={activeProfile} onProfileSwitch={onProfileSwitch}/>}
       </div>
 
       {/* Bottom nav */}
