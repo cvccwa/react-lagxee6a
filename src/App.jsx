@@ -655,9 +655,9 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items,user,session,onSi
           <div>
             <label style={{...lbl,fontSize:13,marginBottom:10}}>Gear Type</label>
             <div style={{display:"flex",gap:8}}>
-              {["Weapon","Accessory","Exclusive"].map(t=>{
+              {["Weapon","Accessory","Exclusive","Armor"].map(t=>{
                 const tc=typeColors[t];const active=form.type===t;
-                return <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"18px 0",background:active?tc.bg:"transparent",border:`2px solid ${active?tc.border:C.border}`,color:active?tc.text:C.textDim,borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:15,fontFamily:"'Courier New',monospace"}}>{t.toUpperCase()}</button>;
+                return <button key={t} onClick={()=>setForm(f=>({...f,type:t}))} style={{flex:1,padding:"14px 0",background:active?tc.bg:"transparent",border:`2px solid ${active?tc.border:C.border}`,color:active?tc.text:C.textDim,borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:13,fontFamily:"'Courier New',monospace"}}>{t.toUpperCase()}</button>;
               })}
             </div>
           </div>
