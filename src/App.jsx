@@ -19,7 +19,7 @@ import {
 } from "./api.js";
 import { supabase } from "./supabase.js";
 
-const APP_VERSION = "1.3.8";
+const APP_VERSION = "1.3.9";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
@@ -390,6 +390,38 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items,user,session,onSi
 
 // ── Inventory Tab ─────────────────────────────────────────────────────────────
 
+const FILTER_ENHANCEMENTS = [
+  { key:"High-Voltage Field Enhancement",  label:"HVF" },
+  { key:"High-Speed Shock Enhancement",    label:"HSS" },
+  { key:"Rune Onslaught Enhancement",      label:"ROE" },
+  { key:"Lightning Domain Enhancement",    label:"LDE" },
+  { key:"Rolling Thunder Enhancement",     label:"RTE" },
+  { key:"Immortal Rune Enhancement",       label:"IRE" },
+  { key:"Ultimate Storm Enhancement",      label:"USE" },
+];
+
+const FILTER_STATS = [
+  { key:"Total Output Boost",                          label:"Total Output Boost"   },
+  { key:"Total Damage Bonus",                          label:"Total Damage Bonus"   },
+  { key:"Precision Rate",                              label:"Precision Rate"       },
+  { key:"Precision Damage",                            label:"Precision Damage"     },
+  { key:"Critical Hit Rate",                           label:"Critical Hit Rate"    },
+  { key:"Critical Damage",                             label:"Critical Damage"      },
+  { key:"Bonus Damage vs Bosses",                      label:"Boss Damage"          },
+  { key:"Bonus Damage vs Close-Range Enemies",         label:"Close-Range Damage"   },
+  { key:"Damage Bonus vs Healthy Enemies",             label:"Healthy Enemy Damage" },
+  { key:"Health",                                      label:"Health (flat)"        },
+  { key:"Percentage Health",                           label:"Health (%)"           },
+  { key:"Armor",                                       label:"Armor Value"          },
+  { key:"Block Rate",                                  label:"Block Rate"           },
+  { key:"Block Damage Reduction",                      label:"Block Dmg Reduction"  },
+  { key:"Dodge Rate",                                  label:"Dodge Rate"           },
+  { key:"Healing Rune Charge Slots",                   label:"Healing Rune Slots"   },
+  { key:"Healing Rune Cooldown Reduction",             label:"Healing Rune CDR"     },
+  { key:"Health Restored Per/s (Restorative Respire)", label:"Health/s (Respire)"   },
+  { key:"Health Restored on Kill",                     label:"Health on Kill"       },
+];
+
 function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts,onExport,onRestoreAll,user,forced,toggleForce,deletionCandidates,deletionIds,deletionRan,isAnalyzing,runDeletionAnalysis,optimResult}) {
   const [restoreText,setRestoreText] = useState("");
   const [showRestore,setShowRestore] = useState(false);
@@ -397,6 +429,19 @@ function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts
   const [exportText,setExportText] = useState("");
   const [showExport,setShowExport] = useState(false);
   const [filterMsg,setFilterMsg] = useState("");
+  const [showFilterPanel,setShowFilterPanel] = useState(false);
+  const [checkedFilters,setCheckedFilters] = useState(new Set());
+
+  const toggleFilter = (statName) => setCheckedFilters(prev => {
+    const next = new Set(prev);
+    if (next.has(statName)) next.delete(statName); else next.add(statName);
+    return next;
+  });
+  const clearFilters = () => setCheckedFilters(new Set());
+
+  const filteredItems = checkedFilters.size > 0
+    ? items.filter(item => [...checkedFilters].every(s => (item.extendedEffects||[]).some(e=>e.stat===s)))
+    : items;
 
   const handleExport = () => {
     const clean=allItems.map(({_score,...rest})=>rest);
@@ -469,8 +514,49 @@ function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts
             )}
           </button>
         </div>
+          {/* Filter panel toggle */}
+          <button onClick={()=>setShowFilterPanel(s=>!s)}
+            style={{padding:"9px 12px",borderRadius:8,cursor:"pointer",fontFamily:"'Courier New',monospace",fontSize:13,background:checkedFilters.size>0?"#0a0f1a":"transparent",border:`1.5px solid ${checkedFilters.size>0?C.gold:C.border}`,color:checkedFilters.size>0?C.gold:C.textDim,display:"flex",alignItems:"center",gap:6,marginLeft:"auto",flexShrink:0}}>
+            🔍
+            {checkedFilters.size>0&&<span style={{background:C.gold,color:C.bg,borderRadius:10,padding:"1px 7px",fontSize:11,fontWeight:700}}>{checkedFilters.size}</span>}
+          </button>
         {filterMsg&&<p style={{color:C.orange,fontSize:13,margin:"8px 0 0"}}>{filterMsg}</p>}
       </div>
+
+      {/* Stat filter panel */}
+      {showFilterPanel&&(
+        <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px",flexShrink:0}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <span style={{color:C.gold,fontSize:13,fontWeight:700,letterSpacing:1.5}}>FILTER BY STAT</span>
+            {checkedFilters.size>0&&(
+              <button onClick={clearFilters} style={{background:"transparent",border:"none",color:C.textDim,fontSize:12,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>
+                Clear all ({checkedFilters.size})
+              </button>
+            )}
+          </div>
+          <p style={{color:C.textDim,fontSize:11,margin:"0 0 14px",lineHeight:1.6}}>Items must have ALL checked stats to appear.</p>
+          <p style={{color:C.textDim,fontSize:11,letterSpacing:1.5,margin:"0 0 10px"}}>ENHANCEMENTS</p>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:16}}>
+            {FILTER_ENHANCEMENTS.map(({key,label})=>{
+              const active=checkedFilters.has(key);
+              return <button key={key} onClick={()=>toggleFilter(key)} style={{padding:"7px 13px",borderRadius:8,cursor:"pointer",fontFamily:"'Courier New',monospace",fontSize:12,fontWeight:active?700:400,background:active?C.purpleDim:"transparent",border:`1.5px solid ${active?C.purpleLight:C.border}`,color:active?C.purpleLight:C.textDim}}>{label}</button>;
+            })}
+          </div>
+          <p style={{color:C.textDim,fontSize:11,letterSpacing:1.5,margin:"0 0 10px"}}>STATS</p>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+            {FILTER_STATS.map(({key,label})=>{
+              const active=checkedFilters.has(key);
+              return <button key={key} onClick={()=>toggleFilter(key)} style={{padding:"7px 13px",borderRadius:8,cursor:"pointer",fontFamily:"'Courier New',monospace",fontSize:12,fontWeight:active?700:400,background:active?"#130f00":"transparent",border:`1.5px solid ${active?C.gold:C.border}`,color:active?C.gold:C.textDim}}>{label}</button>;
+            })}
+          </div>
+        </div>
+      )}
+
+      {checkedFilters.size>0&&(
+        <p style={{color:C.textDim,fontSize:12,margin:"0",flexShrink:0}}>
+          {filteredItems.length} item{filteredItems.length!==1?"s":""} match{filterType!=="All"?` in ${filterType}`:""}
+        </p>
+      )}
 
       {/* Scrollable item list */}
       <div style={{flex:1,overflowY:"auto",minHeight:0}}>
@@ -484,7 +570,7 @@ function InventoryTab({items,allItems,filterType,setFilterType,deleteItem,counts
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100%",color:C.textDim,textAlign:"center",padding:"0 20px"}}>
             <p style={{margin:0,fontSize:16}}>No deletable gear found at current threshold.</p>
           </div>
-        ):items.map(item=>(
+        ):filteredItems.map(item=>(
           <GearCard key={item.id} item={item} onDelete={deleteItem}
             forced={forced?.[item.type]===item.id} onToggleForce={toggleForce}
             deletionInfo={deletionIds?.has(item.id)?deletionCandidates.find(c=>c.item.id===item.id):null}
