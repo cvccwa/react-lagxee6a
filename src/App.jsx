@@ -1574,8 +1574,11 @@ function BuildTab({ session, profiles, setProfiles, activeProfile, onProfileSwit
     // profileDirty resets because BuildTab remounts via key={activeProfile}
   };
 
+  const selectOnFocus = e => e.target.select();
+
   return (
-    <div style={{display:"flex", flexDirection:"column", gap:14, paddingBottom:20, overflowY:"auto", height:"100%"}}>
+    <div style={{display:"flex", flexDirection:"column", height:"100%"}}>
+      <div style={{flex:1, overflowY:"auto", display:"flex", flexDirection:"column", gap:14, paddingBottom:8}}>
 
       {/* Enhancement Thresholds */}
       <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:"18px"}}>
@@ -1592,6 +1595,7 @@ function BuildTab({ session, profiles, setProfiles, activeProfile, onProfileSwit
               <label style={{...lbl, marginBottom:0, flex:1, fontSize:13}}>{label}</label>
               <div style={{display:"flex", alignItems:"center", gap:8}}>
                 <input type="number" value={reqs[key]} onChange={e => updateReq(key, e.target.value)}
+                  onFocus={selectOnFocus}
                   style={{...inp, width:95, textAlign:"right", padding:"11px 12px", fontSize:15}}/>
                 <span style={{color:C.textDim, fontSize:14, minWidth:18}}>{unit}</span>
               </div>
@@ -1621,6 +1625,7 @@ function BuildTab({ session, profiles, setProfiles, activeProfile, onProfileSwit
                   type="number"
                   value={reqs[key] ?? 0}
                   onChange={e => updateReq(key, e.target.value)}
+                  onFocus={selectOnFocus}
                   style={{...inp, width:95, textAlign:"right", padding:"11px 12px", fontSize:15}}
                 />
                 <span style={{color:C.textDim, fontSize:14, minWidth:18}}>{unit}</span>
@@ -1648,6 +1653,7 @@ function BuildTab({ session, profiles, setProfiles, activeProfile, onProfileSwit
               <label style={{...lbl, marginBottom:0, flex:1, fontSize:13}}>{label}</label>
               <div style={{display:"flex", alignItems:"center", gap:8}}>
                 <input type="number" value={skills[key]} onChange={e => updateSkill(key, parseFloat(e.target.value) || 0)}
+                  onFocus={selectOnFocus}
                   style={{...inp, width:95, textAlign:"right", padding:"11px 12px", fontSize:15}}/>
                 <span style={{color:C.textDim, fontSize:14, minWidth:18}}>{unit}</span>
               </div>
@@ -1703,6 +1709,7 @@ function BuildTab({ session, profiles, setProfiles, activeProfile, onProfileSwit
               <div style={{display:"flex", alignItems:"center", gap:8}}>
                 <input type="number" value={skills[key] ?? 0}
                   onChange={e => updateSkill(key, parseFloat(e.target.value) || 0)}
+                  onFocus={selectOnFocus}
                   style={{...inp, width:95, textAlign:"right", padding:"11px 12px", fontSize:15}}/>
                 <span style={{color:C.textDim, fontSize:14, minWidth:18}}>{unit}</span>
               </div>
@@ -1724,6 +1731,7 @@ function BuildTab({ session, profiles, setProfiles, activeProfile, onProfileSwit
               type="number"
               value={reqs.deletionThreshold ?? 95}
               onChange={e => updateReq("deletionThreshold", parseFloat(e.target.value) || 95)}
+              onFocus={selectOnFocus}
               min={50} max={99} step={1}
               style={{...inp, width:95, textAlign:"right", padding:"11px 12px", fontSize:15}}
             />
@@ -1732,7 +1740,10 @@ function BuildTab({ session, profiles, setProfiles, activeProfile, onProfileSwit
         </div>
       </div>
 
-      {/* Profile switcher */}
+      </div>{/* end scrollable */}
+
+      {/* Profile switcher — pinned */}
+      <div style={{flexShrink:0, paddingTop:12, borderTop:`1px solid ${C.border}`}}>
       <div style={{display:"flex", gap:10}}>
         {[0, 1].map(idx => {
           const isActive = idx === activeProfile;
@@ -1760,6 +1771,7 @@ function BuildTab({ session, profiles, setProfiles, activeProfile, onProfileSwit
           );
         })}
       </div>
+      </div>{/* end pinned */}
     </div>
   );
 }
