@@ -140,7 +140,7 @@ function AuthScreen({ onSkip }) {
       <div style={{height:68,flexShrink:0,background:"#07070e",borderBottom:`2px solid ${C.red}`,padding:"0 16px",display:"flex",alignItems:"center"}}>
         <div>
           <h1 style={{margin:0,fontSize:15,fontWeight:900,color:C.gold,letterSpacing:0.5,lineHeight:1.2}}>BLOOD HUNT ⚡ GEAR OPTIMIZER</h1>
-          <p style={{margin:0,fontSize:11,color:C.textDim}}>Thor · Rune Awakening · Precision Build</p>
+          <p style={{margin:0,fontSize:11,color:C.textDim}}>Thor · Rune Awakening</p>
         </div>
       </div>
       <div style={{flex:1,display:"flex",flexDirection:"column",padding:"32px 20px",gap:20,overflowY:"auto"}}>
@@ -1858,7 +1858,7 @@ function SettingsPanel({onClose, itemCount, debugEnabled, setDebugEnabled, user,
 
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px"}}>
             <h3 style={{color:C.gold,margin:"0 0 10px",fontSize:17,letterSpacing:1.5}}>ABOUT</h3>
-            <p style={{color:C.textDim,fontSize:13,margin:0,lineHeight:1.8}}>Blood Hunt Gear Optimizer · Thor Rune Awakening · Precision Build<br/>v{APP_VERSION} · {itemCount} items in inventory</p>
+            <p style={{color:C.textDim,fontSize:13,margin:0,lineHeight:1.8}}>Blood Hunt Gear Optimizer · Thor Rune Awakening<br/>v{APP_VERSION} · {itemCount} items in inventory</p>
           </div>
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px"}}>
             <h3 style={{color:C.gold,margin:"0 0 10px",fontSize:17,letterSpacing:1.5}}>DEVELOPER</h3>
@@ -2404,7 +2404,7 @@ export default function App() {
       <div style={{height:HEADER_H,flexShrink:0,background:"#07070e",borderBottom:`2px solid ${C.red}`,padding:"0 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div style={{minWidth:0,flex:1}}>
           <h1 style={{margin:0,fontSize:15,fontWeight:900,color:C.gold,letterSpacing:0.5,lineHeight:1.2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>BLOOD HUNT ⚡ GEAR OPTIMIZER</h1>
-          <p style={{margin:0,fontSize:11,color:C.textDim,letterSpacing:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Thor · Rune Awakening · Precision Build</p>
+          <p style={{margin:0,fontSize:11,color:C.textDim,letterSpacing:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Thor · Rune Awakening</p>
         </div>
         <button onClick={()=>setShowSettings(true)} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.textDim,borderRadius:10,padding:"10px 12px",cursor:"pointer",fontSize:22,lineHeight:1,flexShrink:0}}>⚙</button>
       </div>
