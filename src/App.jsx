@@ -19,7 +19,7 @@ import {
 } from "./api.js";
 import { supabase } from "./supabase.js";
 
-const APP_VERSION = "1.3.9";
+const APP_VERSION = "1.4.0";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
@@ -190,12 +190,173 @@ const blankForm = (type="Weapon")=>({type,name:"",rating:"",extendedEffects:Arra
 const STATUS_COLOR = {pending:"#7a7090",scanning:"#e8c84a",done:"#4ade80",error:"#f87171"};
 const STATUS_LABEL = {pending:"Queued",scanning:"⚡ Scanning…",done:"✓ Done",error:"✗ Error"};
 
+// ── Camera Capture ─────────────────────────────────────────────────────────────
+
+function CameraCapture({ onCapture, onCancel }) {
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const [queue, setQueue] = useState([]);
+  const [cameraError, setCameraError] = useState(null);
+  const [isCapturing, setIsCapturing] = useState(false);
+
+  const stopCamera = () => {
+    streamRef.current?.getTracks().forEach(t => t.stop());
+  };
+
+  const startCamera = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError("Camera not available in this browser. Please use Upload instead.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode:"environment", focusMode:"continuous", width:{ideal:1920}, height:{ideal:1080} }
+      });
+      streamRef.current = stream;
+      if (videoRef.current) videoRef.current.srcObject = stream;
+    } catch (err) {
+      if (err.name === "NotAllowedError") {
+        setCameraError("Camera permission denied. Please allow camera access or use Upload instead.");
+      } else if (err.name === "NotFoundError") {
+        setCameraError("No camera found on this device. Please use Upload instead.");
+      } else {
+        setCameraError(`Camera unavailable: ${err.message}`);
+      }
+    }
+  };
+
+  useEffect(() => {
+    startCamera();
+    const handleVisibility = () => { if (document.hidden) stopCamera(); };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      stopCamera();
+    };
+  }, []);
+
+  const captureFrame = () => {
+    if (!videoRef.current) return;
+    setIsCapturing(true);
+    setTimeout(() => setIsCapturing(false), 150);
+    const video = videoRef.current;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    canvas.toBlob(blob => {
+      const id = `cam_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+      setQueue(prev => [...prev, { id, blob, dataUrl }]);
+    }, "image/jpeg", 0.92);
+  };
+
+  const removeFromQueue = (id) => setQueue(prev => prev.filter(p => p.id !== id));
+
+  const handleDone = () => {
+    if (queue.length === 0) return;
+    const photos = queue.map(item => ({
+      id: item.id,
+      file: new File([item.blob], `capture_${item.id}.jpg`, { type:"image/jpeg" }),
+      dataUrl: item.dataUrl,
+      status: "pending",
+    }));
+    stopCamera();
+    onCapture(photos);
+  };
+
+  return (
+    <div style={{display:"flex", flexDirection:"column", gap:12}}>
+      {cameraError && (
+        <div style={{padding:"14px", background:"#2e0a0a", border:"1px solid #4a1010", borderRadius:10, color:"#f87171", fontSize:13, lineHeight:1.6}}>
+          {cameraError}
+        </div>
+      )}
+      {!cameraError && (
+        <div style={{position:"relative", borderRadius:12, overflow:"hidden", background:"#000", aspectRatio:"4/3"}}>
+          <video ref={videoRef} autoPlay playsInline muted
+            style={{width:"100%", height:"100%", objectFit:"cover",
+              opacity:isCapturing ? 0.5 : 1, transition:"opacity 0.1s"}}
+          />
+          <div style={{position:"absolute", inset:0, background:"transparent", boxShadow:"inset 0 0 0 60px rgba(0,0,0,0.5)"}}>
+            {[
+              {top:60,  left:20,  borderTop:"3px solid",  borderLeft:"3px solid"},
+              {top:60,  right:20, borderTop:"3px solid",  borderRight:"3px solid"},
+              {bottom:60, left:20, borderBottom:"3px solid", borderLeft:"3px solid"},
+              {bottom:60, right:20, borderBottom:"3px solid", borderRight:"3px solid"},
+            ].map((s, i) => (
+              <div key={i} style={{position:"absolute", width:24, height:24, borderColor:C.gold, ...s}}/>
+            ))}
+            <p style={{position:"absolute", bottom:70, left:0, right:0, textAlign:"center",
+              color:"rgba(255,255,255,0.7)", fontSize:12, margin:0,
+              fontFamily:"'Courier New',monospace", letterSpacing:1}}>
+              POSITION GEAR CARD IN FRAME
+            </p>
+          </div>
+          <button onClick={captureFrame}
+            style={{position:"absolute", bottom:12, left:"50%", transform:"translateX(-50%)",
+              width:60, height:60, borderRadius:"50%", background:C.gold, border:"3px solid #fff",
+              cursor:"pointer", fontSize:24, display:"flex", alignItems:"center",
+              justifyContent:"center", boxShadow:"0 2px 12px rgba(0,0,0,0.5)"}}>
+            📷
+          </button>
+          {queue.length > 0 && (
+            <div style={{position:"absolute", top:12, right:12, background:C.gold, color:C.bg,
+              borderRadius:12, padding:"3px 10px", fontSize:13, fontWeight:700,
+              fontFamily:"'Courier New',monospace"}}>
+              {queue.length} captured
+            </div>
+          )}
+        </div>
+      )}
+      {queue.length > 0 && (
+        <div style={{display:"flex", gap:8, flexWrap:"wrap"}}>
+          {queue.map(item => (
+            <div key={item.id} style={{position:"relative", width:72, height:54}}>
+              <img src={item.dataUrl} alt="capture"
+                style={{width:"100%", height:"100%", objectFit:"cover",
+                  borderRadius:6, border:`1px solid ${C.border}`}}/>
+              <button onClick={() => removeFromQueue(item.id)}
+                style={{position:"absolute", top:-6, right:-6, width:20, height:20,
+                  borderRadius:"50%", background:"#f87171", border:"none", color:"#fff",
+                  fontSize:11, cursor:"pointer", display:"flex", alignItems:"center",
+                  justifyContent:"center", lineHeight:1}}>
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{display:"flex", gap:10}}>
+        <button onClick={() => { stopCamera(); onCancel(); }}
+          style={{flex:1, padding:"13px 0", background:"transparent",
+            border:`1.5px solid ${C.border}`, borderRadius:10,
+            color:C.textDim, fontSize:13, cursor:"pointer",
+            fontFamily:"'Courier New',monospace"}}>
+          Cancel
+        </button>
+        <button onClick={handleDone} disabled={queue.length === 0}
+          style={{flex:2, padding:"13px 0",
+            background:queue.length > 0 ? "#130f00" : "#0a0a0a",
+            border:`1.5px solid ${queue.length > 0 ? C.gold : C.border}`,
+            borderRadius:10, color:queue.length > 0 ? C.gold : C.textDim,
+            fontSize:14, fontWeight:700,
+            cursor:queue.length > 0 ? "pointer" : "not-allowed",
+            fontFamily:"'Courier New',monospace"}}>
+          {queue.length > 0 ? `✓ Scan ${queue.length} photo${queue.length > 1 ? "s" : ""}` : "Capture photos to continue"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function AddTab({form,setForm,addItem,flash,onBulkImport,items,user,session,onSignIn}) {
   const [mode,setMode] = useState("scan");
   const [jsonText,setJsonText] = useState("");
   const [msg,setMsg] = useState({text:"",ok:true});
   const [photos,setPhotos] = useState([]);
   const [scanning,setScanning] = useState(false);
+  const [scanInput,setScanInput] = useState("camera");
   const fileRef = useRef(null);
 
   const setFx=(idx,field,val)=>setForm(f=>({...f,extendedEffects:f.extendedEffects.map((e,i)=>i===idx?{...e,[field]:val}:e)}));
@@ -222,8 +383,15 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items,user,session,onSi
     e.target.value="";
   };
 
-  const scanAll = async () => {
-    const pending=photos.filter(p=>p.status==="pending");
+  const handleCameraCapture = (captured) => {
+    const mapped = captured.map(p => ({...p, preview:p.dataUrl, result:null, error:null}));
+    setScanInput("upload");
+    setPhotos(mapped);
+    scanAll(mapped);
+  };
+
+  const scanAll = async (photosArg) => {
+    const pending=(photosArg || photos).filter(p=>p.status==="pending");
     if (!pending.length) return;
     setScanning(true); setMsg({text:"",ok:true});
     const processOne = async (photo) => {
@@ -277,47 +445,69 @@ function AddTab({form,setForm,addItem,flash,onBulkImport,items,user,session,onSi
             <button onClick={onSignIn} style={{padding:"13px 28px",background:"#130f00",border:`2px solid ${C.gold}`,borderRadius:10,color:C.gold,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>⚡ Sign In / Create Account</button>
           </div>
         ) : (
-        <div style={{display:"flex",flexDirection:"column",flex:1,gap:14,minHeight:0}}>
+        <div style={{display:"flex",flexDirection:"column",flex:1,gap:14,minHeight:0,overflowY:"auto"}}>
           <div style={{background:"#0d0d1f",border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 18px",flexShrink:0}}>
             <p style={{margin:"0 0 5px",color:C.gold,fontSize:17,fontWeight:700}}>📷 MULTI-PHOTO SCAN</p>
-            <p style={{margin:0,color:C.textDim,fontSize:15,lineHeight:1.8}}>Select up to 10 gear card screenshots. Claude reads each card and extracts stats automatically.</p>
+            <p style={{margin:0,color:C.textDim,fontSize:15,lineHeight:1.8}}>Capture with your camera or select screenshots. Claude reads each card and extracts stats automatically.</p>
           </div>
 
-          {!hasPhotos ? (
-            <label htmlFor="gear-photos" style={{display:"flex",alignItems:"center",justifyContent:"center",flex:1,background:"#0d0d1f",border:`3px dashed ${C.purpleLight}`,borderRadius:20,cursor:"pointer",color:C.purpleLight,fontSize:22,fontWeight:700,letterSpacing:1.5,flexDirection:"column",gap:16}}>
-              <span style={{fontSize:72}}>📷</span>
-              <span>+ SELECT PHOTOS</span>
-              <span style={{fontSize:15,color:C.textDim,fontWeight:400}}>Tap to choose from camera roll</span>
-            </label>
-          ) : (
-            <div style={{display:"flex",flexDirection:"column",flex:1,gap:12,minHeight:0}}>
-              <div style={{overflowY:"auto",flex:1}}>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-                  {photos.map(p=>(
-                    <div key={p.id} style={{position:"relative",borderRadius:10,overflow:"hidden",border:`2px solid ${STATUS_COLOR[p.status]}`,background:C.surface}}>
-                      <img src={p.preview} alt="" style={{width:"100%",height:160,objectFit:"cover",display:"block"}}/>
-                      <div style={{padding:"8px 8px",background:"rgba(0,0,0,0.88)",fontSize:14,color:STATUS_COLOR[p.status],textAlign:"center",fontWeight:700}}>{STATUS_LABEL[p.status]}</div>
-                      {p.status==="error"&&<div style={{padding:"4px 8px",background:"rgba(0,0,0,0.9)",fontSize:11,color:"#f87171",textAlign:"center",lineHeight:1.4,wordBreak:"break-word"}}>{p.error}</div>}
-                      {p.status==="pending"&&<button onClick={()=>setPhotos(prev=>prev.filter(x=>x.id!==p.id))} style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.75)",border:"none",color:"#f87171",borderRadius:5,width:34,height:34,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>✕</button>}
-                    </div>
-                  ))}
+          {/* Scan input selector */}
+          <div style={{display:"flex",gap:8,flexShrink:0}}>
+            {[{key:"camera",label:"📷 Camera"},{key:"upload",label:"📁 Upload"}].map(({key,label})=>(
+              <button key={key} onClick={()=>setScanInput(key)}
+                style={{flex:1,padding:"12px 0",background:scanInput===key?"#130f00":"transparent",border:`2px solid ${scanInput===key?C.gold:C.border}`,color:scanInput===key?C.gold:C.textDim,borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:13,fontFamily:"'Courier New',monospace"}}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Camera view */}
+          {scanInput==="camera" && (
+            <CameraCapture
+              onCapture={handleCameraCapture}
+              onCancel={() => setScanInput("upload")}
+            />
+          )}
+
+          {/* Upload view */}
+          {scanInput==="upload" && (
+            !hasPhotos ? (
+              <label htmlFor="gear-photos" style={{display:"flex",alignItems:"center",justifyContent:"center",flex:1,background:"#0d0d1f",border:`3px dashed ${C.purpleLight}`,borderRadius:20,cursor:"pointer",color:C.purpleLight,fontSize:22,fontWeight:700,letterSpacing:1.5,flexDirection:"column",gap:16}}>
+                <span style={{fontSize:72}}>📁</span>
+                <span>+ SELECT PHOTOS</span>
+                <span style={{fontSize:15,color:C.textDim,fontWeight:400}}>Tap to choose from camera roll</span>
+              </label>
+            ) : (
+              <div style={{display:"flex",flexDirection:"column",flex:1,gap:12,minHeight:0}}>
+                <div style={{overflowY:"auto",flex:1}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+                    {photos.map(p=>(
+                      <div key={p.id} style={{position:"relative",borderRadius:10,overflow:"hidden",border:`2px solid ${STATUS_COLOR[p.status]}`,background:C.surface}}>
+                        <img src={p.preview} alt="" style={{width:"100%",height:160,objectFit:"cover",display:"block"}}/>
+                        <div style={{padding:"8px 8px",background:"rgba(0,0,0,0.88)",fontSize:14,color:STATUS_COLOR[p.status],textAlign:"center",fontWeight:700}}>{STATUS_LABEL[p.status]}</div>
+                        {p.status==="error"&&<div style={{padding:"4px 8px",background:"rgba(0,0,0,0.9)",fontSize:11,color:"#f87171",textAlign:"center",lineHeight:1.4,wordBreak:"break-word"}}>{p.error}</div>}
+                        {p.status==="pending"&&<button onClick={()=>setPhotos(prev=>prev.filter(x=>x.id!==p.id))} style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.75)",border:"none",color:"#f87171",borderRadius:5,width:34,height:34,cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>✕</button>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{display:"flex",gap:12,fontSize:15,color:C.textDim,alignItems:"center",flexShrink:0}}>
+                  {pendingCount>0&&<span>⏳ {pendingCount} queued</span>}
+                  {doneCount>0&&<span style={{color:C.green}}>✓ {doneCount} done</span>}
+                  {errorCount>0&&<span style={{color:"#f87171"}}>✗ {errorCount} failed</span>}
+                  <label htmlFor="gear-photos" style={{marginLeft:"auto",color:C.purpleLight,cursor:"pointer",fontSize:13,fontFamily:"'Courier New',monospace"}}>+ Add more</label>
+                  <button onClick={()=>setPhotos([])} style={{background:"transparent",border:"none",color:C.textDim,cursor:"pointer",fontSize:13,fontFamily:"'Courier New',monospace"}}>Clear</button>
+                </div>
+
+                <div style={{display:"flex",gap:10,flexShrink:0}}>
+                  {pendingCount>0&&<button onClick={()=>scanAll()} disabled={scanning} style={{flex:2,padding:"22px 0",background:scanning?"#111":"#130f00",border:`2px solid ${scanning?C.border:C.gold}`,borderRadius:12,color:scanning?C.textDim:C.gold,fontWeight:700,fontSize:18,letterSpacing:2,cursor:scanning?"not-allowed":"pointer",fontFamily:"'Courier New',monospace"}}>{scanning?"⚡ SCANNING…":"⚡ SCAN ALL"}</button>}
+                  {doneCount>0&&<button onClick={addScanned} style={{flex:1,padding:"22px 0",background:C.greenDim,border:`2px solid ${C.green}`,borderRadius:12,color:C.green,fontWeight:700,fontSize:18,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>✓ ADD {doneCount}</button>}
                 </div>
               </div>
-
-              <div style={{display:"flex",gap:12,fontSize:15,color:C.textDim,alignItems:"center",flexShrink:0}}>
-                {pendingCount>0&&<span>⏳ {pendingCount} queued</span>}
-                {doneCount>0&&<span style={{color:C.green}}>✓ {doneCount} done</span>}
-                {errorCount>0&&<span style={{color:"#f87171"}}>✗ {errorCount} failed</span>}
-                <label htmlFor="gear-photos" style={{marginLeft:"auto",color:C.purpleLight,cursor:"pointer",fontSize:13,fontFamily:"'Courier New',monospace"}}>+ Add more</label>
-                <button onClick={()=>setPhotos([])} style={{background:"transparent",border:"none",color:C.textDim,cursor:"pointer",fontSize:13,fontFamily:"'Courier New',monospace"}}>Clear</button>
-              </div>
-
-              <div style={{display:"flex",gap:10,flexShrink:0}}>
-                {pendingCount>0&&<button onClick={scanAll} disabled={scanning} style={{flex:2,padding:"22px 0",background:scanning?"#111":"#130f00",border:`2px solid ${scanning?C.border:C.gold}`,borderRadius:12,color:scanning?C.textDim:C.gold,fontWeight:700,fontSize:18,letterSpacing:2,cursor:scanning?"not-allowed":"pointer",fontFamily:"'Courier New',monospace"}}>{scanning?"⚡ SCANNING…":"⚡ SCAN ALL"}</button>}
-                {doneCount>0&&<button onClick={addScanned} style={{flex:1,padding:"22px 0",background:C.greenDim,border:`2px solid ${C.green}`,borderRadius:12,color:C.green,fontWeight:700,fontSize:18,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>✓ ADD {doneCount}</button>}
-              </div>
-            </div>
+            )
           )}
+
           <input id="gear-photos" ref={fileRef} type="file" accept="image/*" multiple onChange={handleFileSelect} style={{display:"none"}}/>
         </div>
         )
