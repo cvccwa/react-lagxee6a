@@ -24,7 +24,9 @@ export function getSkills() {
     const isOldFormat = "skillFlatHealth" in raw || "tdbSkill" in raw;
     const n = isOldFormat ? { ...DEFAULT_SKILLS } : { ...DEFAULT_SKILLS, ...raw };
 
-    const pdMult = n.j3 === "A" ? 1.5 : 2;
+    const j3 = n.j3;
+    const pdMult = j3 === "B" ? 2.0 : 1.0;  // Prec DMG ×200% only when j3="B"
+    const cdMult = j3 === "A" ? 1.5 : 1.0;  // Crit DMG ×150% only when j3="A"
     const j1AtkBonus = n.j1 === "A" ? 40 : 0;
 
     return {
@@ -34,6 +36,7 @@ export function getSkills() {
       pr:               (n.pr     || 0) * 1,
       pd:               (n.pd     || 0) * 175,
       pdMult,
+      cdMult,
       // j2 "B" = Secondary/Ability DMG +50%, folds into tdbSkill (same additive bracket)
       tdbSkill:         (n.tdb    || 0) * 10 + (n.j2 === "B" ? 50 : 0),
       bossPriority:     n.bossPriority ?? 50,
@@ -61,10 +64,11 @@ export function getSkills() {
 
 function getSkillsFromDefaults() {
   const n = { ...DEFAULT_SKILLS };
-  const pdMult = n.j3 === "A" ? 1.5 : 2;
+  const pdMult = n.j3 === "B" ? 2.0 : 1.0;
+  const cdMult = n.j3 === "A" ? 1.5 : 1.0;
   const j1AtkBonus = n.j1 === "A" ? 40 : 0;
   return {
-    cr: n.cr * 3, cd: n.cd * 30, pr: n.pr * 1, pd: n.pd * 175, pdMult,
+    cr: n.cr * 3, cd: n.cd * 30, pr: n.pr * 1, pd: n.pd * 175, pdMult, cdMult,
     tdbSkill: n.tdb * 10 + (n.j2 === "B" ? 50 : 0), bossPriority: n.bossPriority ?? 50,
     skillFlatHealth: (n.h_flat + n.h_flat2) * 70,
     skillPctHealth: n.h_pct * 10, skillPctDmgRes: n.dmgres * 10,
@@ -206,18 +210,19 @@ export function scoreCombo(w, a, e, skills = null) {
   const displayed_tob = s.skillTOB_arcane + s.skillTOB_nodes
                       + drTOB_gear(w_tob) + drTOB_gear(a_tob) + drTOB_gear(e_tob);
 
-  // Row 21 junction
+  // j3 junction multipliers (from skills object)
   const pdMult = s.pdMult;
-  const cdMult = pdMult === 2 ? 1 : 1.5;
+  const cdMult = s.cdMult;
 
-  // Expected hit multiplier (precision checked first, then crit, then normal)
+  // Competitive roll: precision and crit compete per hit, higher multiplier wins
   const pr_total = (1 + s.pr + pr_gear) / 100;
   const pd_total = (800 + s.pd + pd_gear) * pdMult / 100;
   const cr_total = (5 + s.cr + BASE_CR_AMULET + cr_gear) / 100;
   const cd_total = (150 + s.cd + cd_gear) * cdMult / 100;
-  const expected_hit = pr_total * pd_total
-                     + cr_total * cd_total
-                     + (1 - pr_total - cr_total) * 1;
+  const prec_wins = pd_total >= cd_total;
+  const expected_hit = prec_wins
+    ? pr_total * pd_total + cr_total * (1 - pr_total) * cd_total + (1 - pr_total) * (1 - cr_total)
+    : cr_total * cd_total + pr_total * (1 - cr_total) * pd_total + (1 - cr_total) * (1 - pr_total);
 
   // Shared mechanics
   const proj_damage = BASE_MB_PROJ_DAMAGE;
@@ -270,7 +275,7 @@ export function checkReqs(w, a, e, reqs, skills = null) {
   const e_tob = itemStatValue(e, "Total Output Boost");
 
   const pdMult = s.pdMult;
-  const cdMult = pdMult === 2 ? 1 : 1.5;
+  const cdMult = s.cdMult;
 
   const pr_total   = Math.round((1 + s.pr + pr_gear) * 10) / 10;
   const pd_total   = Math.round((800 + s.pd + pd_gear) * pdMult);

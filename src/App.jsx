@@ -20,7 +20,7 @@ import {
 } from "./api.js";
 import { supabase } from "./supabase.js";
 
-const APP_VERSION = "1.5.1";
+const APP_VERSION = "1.5.2";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
