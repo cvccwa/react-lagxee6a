@@ -5,7 +5,7 @@
 // To update skill tree profile: edit the SKILL_* constants below.
 // To update base game values: edit the BASE_* constants below.
 
-import { STAT_W, ENH_W, GRADE_M, MANDATORY_ENH, DEFAULT_REQS, DEFAULT_SKILLS } from "./config.js";
+import { STAT_W, ENH_W, GRADE_M, MANDATORY_ENH, DEFAULT_REQS, DEFAULT_SKILLS, ARCANE_TOB_DISPLAYED } from "./config.js";
 
 // ── Base Game Constants ───────────────────────────────────────────────────────
 // Measured with zero gear AND zero skill points assigned.
@@ -13,16 +13,6 @@ import { STAT_W, ENH_W, GRADE_M, MANDATORY_ENH, DEFAULT_REQS, DEFAULT_SKILLS } f
 const BASE_MB_PROJ_DAMAGE = 20869; // 70 base + 20000 Gaea Sigil base effect + 799 God Tempest base effect
 const HVF_COEFFICIENT     = 49 / 90; // Fixed scaling coefficient for HVF→zap conversion, confirmed by community spreadsheet
 const BASE_CR_AMULET      = 16.2;  // Alchemy Amulet base effect — fixed on all Amulets, not in extendedEffects
-
-// ── Skill Tree Constants (Profile 1) ─────────────────────────────────────────
-// Fixed contributions from your consistent skill tree assignment.
-// Update these if you reassign skill points.
-
-const SKILL_ATTACK_SPEED = 100;   // % attack speed bonus: Enchanted Flurry (60%) + general (40%)
-const SKILL_HSS          = 30;    // % HSS inherited from Mjolnir Bash attack speed
-const SKILL_HVF          = 150;   // % HVF from 3/3 High-Voltage Field trait
-const SKILL_LDE          = 4.5;   // m LDE from 3/3 Lightning Domain trait
-const SKILL_TOB          = 278;   // % Total Output Boost: 117% base + 161% skills (no DR — skills exempt)
 
 // Read skill config from localStorage and derive formula-facing values from per-node ranks.
 // Returns the same keys as before so scoreCombo/checkReqs/getSurvivabilityStats need no changes.
@@ -35,15 +25,19 @@ export function getSkills() {
     const n = isOldFormat ? { ...DEFAULT_SKILLS } : { ...DEFAULT_SKILLS, ...raw };
 
     const pdMult = n.j3 === "A" ? 1.5 : 2;
+    const j1AtkBonus = n.j1 === "A" ? 40 : 0;
 
     return {
+      // Core DPS stats
       cr:               (n.cr     || 0) * 3,
       cd:               (n.cd     || 0) * 30,
       pr:               (n.pr     || 0) * 1,
       pd:               (n.pd     || 0) * 175,
       pdMult,
-      tdbSkill:         (n.tdb    || 0) * 10,
+      // j2 "A" = Primary DMG +50%, folds into tdbSkill (same additive bracket)
+      tdbSkill:         (n.tdb    || 0) * 10 + (n.j2 === "A" ? 50 : 0),
       bossPriority:     n.bossPriority ?? 50,
+      // Survivability
       skillFlatHealth:  ((n.h_flat  || 0) + (n.h_flat2 || 0)) * 70,
       skillPctHealth:   (n.h_pct   || 0) * 10,
       skillPctDmgRes:   (n.dmgres  || 0) * 10,
@@ -51,6 +45,15 @@ export function getSkills() {
       skillBlockRate:   (n.br      || 0) * 3,
       skillBlockDR:     ((n.bdr1   || 0) + (n.bdr2    || 0)) * 15,
       skillDodgeRate:   (n.dodge   || 0) * 1,
+      // Phase 2: Rune Awakening dynamic values (linear, no DR)
+      skillHSS:         (n.rune_hss             || 0) * 10,
+      skillHVF:         (n.rune_hvf             || 0) * 50,
+      skillLDE:         (n.rune_lightning_domain || 0) * 1.5,
+      skillAttackSpeed: j1AtkBonus + (n.rune_enchanted_flurry || 0) * 20,
+      // TOB: arcane fixed constant + two skill node pools (power-law DR, not gear DR)
+      skillTOB_arcane:  ARCANE_TOB_DISPLAYED,
+      skillTOB_nodes:   drTOB_skills((n.tob  || 0) * 15)
+                      + drTOB_skills((n.tob2 || 0) * 15),
       _nodes: n,
     };
   } catch { return getSkillsFromDefaults(); }
@@ -58,13 +61,21 @@ export function getSkills() {
 
 function getSkillsFromDefaults() {
   const n = { ...DEFAULT_SKILLS };
+  const pdMult = n.j3 === "A" ? 1.5 : 2;
+  const j1AtkBonus = n.j1 === "A" ? 40 : 0;
   return {
-    cr: n.cr * 3, cd: n.cd * 30, pr: n.pr * 1, pd: n.pd * 175, pdMult: 2,
-    tdbSkill: n.tdb * 10, bossPriority: 50,
+    cr: n.cr * 3, cd: n.cd * 30, pr: n.pr * 1, pd: n.pd * 175, pdMult,
+    tdbSkill: n.tdb * 10 + (n.j2 === "A" ? 50 : 0), bossPriority: n.bossPriority ?? 50,
     skillFlatHealth: (n.h_flat + n.h_flat2) * 70,
     skillPctHealth: n.h_pct * 10, skillPctDmgRes: n.dmgres * 10,
     skillArmorValue: (n.armor1 + n.armor2) * 50, skillBlockRate: n.br * 3,
     skillBlockDR: (n.bdr1 + n.bdr2) * 15, skillDodgeRate: n.dodge * 1,
+    skillHSS: n.rune_hss * 10,
+    skillHVF: n.rune_hvf * 50,
+    skillLDE: n.rune_lightning_domain * 1.5,
+    skillAttackSpeed: j1AtkBonus + n.rune_enchanted_flurry * 20,
+    skillTOB_arcane: ARCANE_TOB_DISPLAYED,
+    skillTOB_nodes: drTOB_skills(n.tob * 15) + drTOB_skills(n.tob2 * 15),
     _nodes: n,
   };
 }
@@ -82,9 +93,17 @@ function getSkillsFromDefaults() {
 
 const TOB_COEFF = 11.5;  // Fitted from community spreadsheet formula
 
-function drTOB(rawItemTOB) {
-  if (rawItemTOB <= 0) return 0;
-  return TOB_COEFF * Math.sqrt(rawItemTOB);
+// Gear TOB: square-root DR, applied per item independently
+function drTOB_gear(x) {
+  if (x <= 0) return 0;
+  return Math.round(TOB_COEFF * Math.sqrt(x));
+}
+
+// Skill node TOB: power-law DR, empirically derived (max error ±1)
+// Different formula from gear — NOT interchangeable
+function drTOB_skills(x) {
+  if (x <= 0) return 0;
+  return Math.round(1.9426 * Math.pow(x, 0.8644));
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -184,7 +203,8 @@ export function scoreCombo(w, a, e, skills = null) {
   const w_tob = itemStatValue(w, "Total Output Boost");
   const a_tob = itemStatValue(a, "Total Output Boost");
   const e_tob = itemStatValue(e, "Total Output Boost");
-  const displayed_tob = SKILL_TOB + drTOB(w_tob) + drTOB(a_tob) + drTOB(e_tob);
+  const displayed_tob = s.skillTOB_arcane + s.skillTOB_nodes
+                      + drTOB_gear(w_tob) + drTOB_gear(a_tob) + drTOB_gear(e_tob);
 
   // Row 21 junction
   const pdMult = s.pdMult;
@@ -201,13 +221,13 @@ export function scoreCombo(w, a, e, skills = null) {
 
   // Shared mechanics
   const proj_damage = BASE_MB_PROJ_DAMAGE;
-  const proj_freq   = 1 + (SKILL_ATTACK_SPEED + roe_gear) / 100;
-  const zap_damage  = proj_damage * (SKILL_HVF + hvf_gear) / 100 * HVF_COEFFICIENT;
-  const zap_freq    = proj_freq * (SKILL_HSS + hss_gear) / 100;
+  const proj_freq   = 1 + (s.skillAttackSpeed + roe_gear) / 100;
+  const zap_damage  = proj_damage * (s.skillHVF + hvf_gear) / 100 * HVF_COEFFICIENT;
+  const zap_freq    = proj_freq * (s.skillHSS + hss_gear) / 100;
   const boss_priority = s.bossPriority / 100;
   const tdb_factor  = 1 + (s.tdbSkill + tdb_gear + boss_priority * boss_gear) / 100;
   const output      = displayed_tob / 100;
-  const area        = Math.pow(SKILL_LDE + lde_gear, 1.5);
+  const area        = Math.pow(s.skillLDE + lde_gear, 1.5);
 
   const field_DPS = zap_damage * zap_freq * expected_hit * tdb_factor * output * area;
   const single_zap = zap_damage * output * tdb_factor; // normal hit, no crit/precision
@@ -256,7 +276,8 @@ export function checkReqs(w, a, e, reqs, skills = null) {
   const pd_total   = Math.round((800 + s.pd + pd_gear) * pdMult);
   const cr_total   = Math.round((5 + s.cr + BASE_CR_AMULET + cr_gear) * 10) / 10;
   const cd_total   = Math.round((150 + s.cd + cd_gear) * cdMult);
-  const tob_total  = Math.round(SKILL_TOB + 11.5 * Math.sqrt(w_tob) + 11.5 * Math.sqrt(a_tob) + 11.5 * Math.sqrt(e_tob));
+  const tob_total  = Math.round(s.skillTOB_arcane + s.skillTOB_nodes
+                   + drTOB_gear(w_tob) + drTOB_gear(a_tob) + drTOB_gear(e_tob));
   const tdb_total  = tdb_gear;
   const boss_total = boss_gear;
 
