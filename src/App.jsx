@@ -20,7 +20,7 @@ import {
 } from "./api.js";
 import { supabase } from "./supabase.js";
 
-const APP_VERSION = "1.4.3";
+const APP_VERSION = "1.5.0";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
@@ -1574,29 +1574,324 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
   );
 }
 
+// ── Skill Tree constants ───────────────────────────────────────────────────────
+
+const MAX_SKILL_POINTS = 60;
+
+const STAT_SKILLS = [
+  { id:"tdb",    label:"Total Damage Bonus",      max:5, perRank:10,  unit:"%" },
+  { id:"h_flat", label:"Flat Health",             max:5, perRank:70,  unit:""  },
+  { id:"tob",    label:"Output Amplification",    max:5, perRank:15,  unit:"%" },
+  { id:"armor1", label:"Armor Value",             max:5, perRank:50,  unit:""  },
+  { id:"cd",     label:"Critical Damage",         max:5, perRank:30,  unit:"%" },
+  { id:"br",     label:"Block Rate",              max:5, perRank:3,   unit:"%" },
+  { id:"j1",     label:"ATK Speed or Abil CDR",   isJunction:true,
+    optA:"ATK Spd +40%", optB:"Abil CDR −40%" },
+  { id:"h_flat2",label:"Flat Health",             max:5, perRank:70,  unit:""  },
+  { id:"cr",     label:"Critical Hit Rate",       max:5, perRank:3,   unit:"%" },
+  { id:"bdr1",   label:"Block Mitigation",        max:5, perRank:15,  unit:""  },
+  { id:"tob2",   label:"Output Amplification",    max:5, perRank:15,  unit:"%" },
+  { id:"h_pct",  label:"% Max Health",            max:5, perRank:10,  unit:"%" },
+  { id:"j2",     label:"Primary or Secondary DMG",isJunction:true,
+    optA:"Primary +50%", optB:"Secondary +50%" },
+  { id:"dodge",  label:"Dodge Rate",              max:5, perRank:1,   unit:"%" },
+  { id:"pr",     label:"Precision Rate",          max:5, perRank:1,   unit:"%" },
+  { id:"armor2", label:"Armor Value",             max:5, perRank:50,  unit:""  },
+  { id:"pd",     label:"Precision Damage",        max:5, perRank:175, unit:"%" },
+  { id:"dmgres", label:"% Damage Resistance",     max:5, perRank:10,  unit:"%" },
+  { id:"ult",    label:"Ultimate Boost",          max:5, perRank:30,  unit:"%" },
+  { id:"bdr2",   label:"Block Mitigation",        max:5, perRank:15,  unit:""  },
+  { id:"j3",     label:"Crit or Precision ×",     isJunction:true,
+    optA:"Crit DMG ×150%", optB:"Prec DMG ×200%" },
+];
+
+const RUNE_SKILLS = [
+  { id:"rune_enchanted_flurry", label:"Enchanted Flurry",       max:3, rankDesc:["+20% ATK Spd","+40% ATK Spd","+60% ATK Spd"] },
+  { id:"rune_immortal_rune",    label:"Immortal Rune",           max:3, rankDesc:["+10s dur","+20s dur","+30s dur"] },
+  { id:"rune_rolling_thunder",  label:"Rolling Thunder",         max:3, rankDesc:["+50% bonus","+100% bonus","+150% bonus"] },
+  { id:"rune_endless_current",  label:"Endless Current",         max:1, rankDesc:["Enables HVF"] },
+  { id:"rune_lightning_domain", label:"Lightning Domain",        max:3, rankDesc:["+1.5m","+3.0m","+4.5m"] },
+  { id:"rune_hvf",              label:"High-Voltage Field",      max:3, rankDesc:["+50% HVF","+100% HVF","+150% HVF"] },
+  { id:"rune_thunder_rune",     label:"Thunder Rune",            max:1, rankDesc:["Larger projectile"] },
+  { id:"rune_hss",              label:"High-Speed Shock",        max:3, rankDesc:["+10% HSS","+20% HSS","+30% HSS"] },
+  { id:"rune_ultimate_storm",   label:"Ultimate Storm",          max:3, rankDesc:["−0.15s CDR","−0.30s CDR","−0.45s CDR"] },
+  { id:"rune_cloud_piercing",   label:"Cloud-Piercing Thunder",  max:1, rankDesc:["Pierce enemies"] },
+];
+
+function countPoints(nodes) {
+  let sum = 0;
+  for (const sk of STAT_SKILLS) {
+    if (sk.isJunction) { if (nodes[sk.id] != null) sum += 1; }
+    else sum += (nodes[sk.id] || 0);
+  }
+  for (const sk of RUNE_SKILLS) sum += (nodes[sk.id] || 0);
+  return sum;
+}
+
+// ── Skill Tree Panel ───────────────────────────────────────────────────────────
+
+function SkillTreePanel({ nodes, onChange, migrationNotice, onDismissMigration }) {
+  const [showDerived, setShowDerived] = useState(false);
+
+  const totalPts = countPoints(nodes);
+  const atCap = totalPts >= MAX_SKILL_POINTS;
+  const n = nodes;
+
+  // At cap with points → decrement; at max → reset; can add → increment
+  const tapStat = (sk) => {
+    const cur = nodes[sk.id] || 0;
+    if (cur < sk.max && !atCap) onChange(sk.id, cur + 1);
+    else if (cur === sk.max) onChange(sk.id, 0);
+    else if (atCap && cur > 0) onChange(sk.id, cur - 1);
+  };
+
+  const tapJunction = (sk, opt) => {
+    const cur = nodes[sk.id];
+    if (cur === opt) { onChange(sk.id, null); return; }
+    if (atCap && cur == null) return;
+    onChange(sk.id, opt);
+  };
+
+  const tapRune = (sk) => {
+    const cur = nodes[sk.id] || 0;
+    if (cur < sk.max && !atCap) onChange(sk.id, cur + 1);
+    else if (cur === sk.max) onChange(sk.id, 0);
+    else if (atCap && cur > 0) onChange(sk.id, cur - 1);
+  };
+
+  const RankDots = ({ current, max, color }) => {
+    if (max === 1) return null;
+    return (
+      <div style={{display:"flex",gap:3,marginTop:4}}>
+        {Array.from({length:max}).map((_,i)=>(
+          <div key={i} style={{width:max<=3?8:6,height:max<=3?8:6,borderRadius:"50%",
+            background:i<current?color:C.border,
+            boxShadow:i<current?`0 0 4px ${color}88`:"none"}}/>
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      {migrationNotice && (
+        <div style={{padding:"12px 14px",background:"#1a1200",border:`1px solid ${C.gold}`,borderRadius:10,marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}}>
+          <div>
+            <p style={{color:C.gold,fontSize:13,margin:"0 0 3px",fontWeight:700}}>Skill configuration updated</p>
+            <p style={{color:C.textDim,fontSize:12,margin:0,lineHeight:1.6}}>The skill tree has been redesigned. Please set your allocation below and save.</p>
+          </div>
+          <button onClick={onDismissMigration} style={{background:"transparent",border:"none",color:C.textDim,fontSize:18,cursor:"pointer",lineHeight:1,flexShrink:0,padding:"0 2px"}}>×</button>
+        </div>
+      )}
+
+      {/* Progress bar */}
+      <div style={{marginBottom:12}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
+          <span style={{color:C.textDim,fontSize:11,letterSpacing:1}}>SKILL POINTS</span>
+          <span style={{color:atCap?C.green:C.textDim,fontSize:11,fontWeight:atCap?700:400}}>{totalPts}/{MAX_SKILL_POINTS}</span>
+        </div>
+        <div style={{height:4,borderRadius:2,background:C.border,overflow:"hidden"}}>
+          <div style={{height:"100%",borderRadius:2,background:atCap?C.green:C.purpleLight,width:`${Math.min(totalPts/MAX_SKILL_POINTS*100,100)}%`,transition:"width 0.15s"}}/>
+        </div>
+        {atCap&&(
+          <p style={{color:C.green,fontSize:10,margin:"5px 0 0",textAlign:"center",fontFamily:"'Courier New',monospace"}}>
+            All 60 points assigned · Tap filled nodes to remove
+          </p>
+        )}
+      </div>
+
+      {/* Two-column layout — bounded scroll container */}
+      <div style={{maxHeight:"58vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
+      <div style={{display:"flex"}}>
+
+        {/* Left: Stat skills */}
+        <div style={{flex:1,minWidth:0,paddingRight:6,borderRight:`1px solid ${C.border}`}}>
+          <p style={{...lbl,fontSize:10,marginBottom:8}}>STAT SKILLS</p>
+          {STAT_SKILLS.map(sk=>{
+            if (sk.isJunction) {
+              const cur = nodes[sk.id];
+              return (
+                <div key={sk.id} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"8px 10px",marginBottom:2}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                    <span style={{color:C.textDim,fontSize:12}}>{sk.label}</span>
+                    <span style={{color:cur!==null?C.purpleLight:C.border,fontSize:11,fontFamily:"'Courier New',monospace",fontWeight:700}}>{cur!==null?"1/1":"0/1"}</span>
+                  </div>
+                  <div style={{display:"flex",gap:6}}>
+                    {[{k:"A",desc:sk.optA},{k:"B",desc:sk.optB}].map(({k,desc})=>{
+                      const sel=cur===k;
+                      const blocked=cur===null&&atCap;
+                      return (
+                        <button key={k} onClick={()=>tapJunction(sk,k)}
+                          style={{flex:1,padding:"7px 4px",borderRadius:8,
+                            background:sel?C.purpleDim:"transparent",
+                            border:`1.5px solid ${sel?C.purpleLight:C.border}`,
+                            color:sel?C.purpleLight:C.textDim,
+                            fontSize:10,cursor:"pointer",lineHeight:1.4,
+                            fontFamily:"'Courier New',monospace",
+                            opacity:blocked?0.4:1}}>
+                          {desc}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            }
+            const cur = nodes[sk.id]||0;
+            const hasPoints = cur>0;
+            const blocked = atCap&&cur===0;
+            return (
+              <button key={sk.id} onClick={()=>tapStat(sk)}
+                style={{width:"100%",textAlign:"left",cursor:"pointer",
+                  background:hasPoints?"#1a0f35":C.surface,
+                  border:`1px solid ${hasPoints?C.purpleLight:C.border}`,
+                  borderRadius:10,padding:"8px 10px",marginBottom:2,
+                  boxShadow:hasPoints?`0 0 6px ${C.purpleLight}33`:"none",
+                  transition:"all 0.15s",opacity:blocked?0.35:1}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                  <span style={{color:hasPoints?C.text:C.textDim,fontSize:12,lineHeight:1.3,flex:1,textAlign:"left"}}>{sk.label}</span>
+                  <span style={{color:hasPoints?C.purpleLight:C.border,fontSize:11,fontFamily:"'Courier New',monospace",fontWeight:700,marginLeft:6,flexShrink:0}}>{cur}/{sk.max}</span>
+                </div>
+                <RankDots current={cur} max={sk.max} color={C.purpleLight}/>
+                {hasPoints&&<p style={{color:C.purpleLight,fontSize:10,margin:"4px 0 0",fontFamily:"'Courier New',monospace"}}>+{cur*sk.perRank}{sk.unit}</p>}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Right: Rune Awakening — space-between to span stat column height */}
+        <div style={{width:150,flexShrink:0,paddingLeft:6,display:"flex",flexDirection:"column"}}>
+          <p style={{...lbl,fontSize:10,marginBottom:8,flexShrink:0}}>RUNE</p>
+          <div style={{display:"flex",flexDirection:"column",justifyContent:"space-between",flex:1}}>
+          {RUNE_SKILLS.map(sk=>{
+            const cur=nodes[sk.id]||0;
+            const hasPoints=cur>0;
+            const isToggle=sk.max===1;
+            const blocked=atCap&&cur===0;
+            return (
+              <button key={sk.id} onClick={()=>tapRune(sk)}
+                style={{width:"100%",textAlign:"left",cursor:"pointer",
+                  background:hasPoints?"#1a0f35":C.surface,
+                  border:`1px solid ${hasPoints?C.gold:C.border}`,
+                  borderRadius:10,padding:"8px 10px",
+                  boxShadow:hasPoints?`0 0 6px ${C.gold}22`:"none",
+                  transition:"all 0.15s",opacity:blocked?0.35:1}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                  <span style={{color:hasPoints?C.text:C.textDim,fontSize:11,lineHeight:1.3,flex:1,textAlign:"left"}}>{sk.label}</span>
+                  <span style={{color:hasPoints?C.gold:C.border,fontSize:11,fontFamily:"'Courier New',monospace",fontWeight:700,marginLeft:4,flexShrink:0}}>
+                    {isToggle?(cur?"✓":"○"):`${cur}/${sk.max}`}
+                  </span>
+                </div>
+                {!isToggle&&<RankDots current={cur} max={sk.max} color={C.gold}/>}
+                {hasPoints&&<p style={{color:C.gold,fontSize:10,margin:"4px 0 0",fontFamily:"'Courier New',monospace",opacity:0.8}}>{sk.rankDesc[cur-1]}</p>}
+              </button>
+            );
+          })}
+          </div>
+        </div>
+      </div>
+      </div>{/* end scroll container */}
+
+      {/* Derived Values */}
+      <div style={{marginTop:14,borderTop:`1px solid ${C.border}`,paddingTop:12}}>
+        <button onClick={()=>setShowDerived(d=>!d)}
+          style={{width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:0,
+            fontFamily:"'Courier New',monospace",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{color:C.gold,fontSize:13,fontWeight:700,letterSpacing:1}}>DERIVED VALUES</span>
+          <span style={{color:C.textDim,fontSize:13}}>{showDerived?"▲":"▼"}</span>
+        </button>
+        {showDerived&&(
+          <div style={{marginTop:12,display:"flex",flexDirection:"column",gap:14}}>
+            <div>
+              <p style={{...lbl,fontSize:10,marginBottom:8,color:C.gold}}>RUNE AWAKENING</p>
+              {RUNE_SKILLS.map(sk=>{
+                const cur=nodes[sk.id]||0;
+                const isToggle=sk.max===1;
+                const display=isToggle?(cur?"✓ Assigned":"Not assigned"):(cur>0?sk.rankDesc[cur-1]:`0/${sk.max}`);
+                return (
+                  <div key={sk.id} style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                    <span style={{color:C.textDim,fontSize:12}}>{sk.label}</span>
+                    <span style={{color:cur>0?C.gold:C.border,fontSize:12,fontFamily:"'Courier New',monospace"}}>{display}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div>
+              <p style={{...lbl,fontSize:10,marginBottom:8,color:C.purpleLight}}>CORE STATS</p>
+              {[
+                ["Flat Health",          `+${((n.h_flat||0)+(n.h_flat2||0))*70}`],
+                ["% Max Health",         `+${(n.h_pct||0)*10}%`],
+                ["% Damage Resistance",  `+${(n.dmgres||0)*10}%`],
+                ["Armor Value",          `+${((n.armor1||0)+(n.armor2||0))*50}`],
+                ["Block Rate",           `+${(n.br||0)*3}%`],
+                ["Block Mitigation",     `+${((n.bdr1||0)+(n.bdr2||0))*15}`],
+                ["Dodge Rate",           `+${(n.dodge||0)*1}%`],
+                ["Critical Hit Rate",    `+${(n.cr||0)*3}%`],
+                ["Critical Damage",      `+${(n.cd||0)*30}%`],
+                ["Precision Rate",       `+${(n.pr||0)*1}%`],
+                ["Precision Damage",     `+${(n.pd||0)*175}%`],
+                ["Total Damage Bonus",   `+${(n.tdb||0)*10}%`],
+                ["Output Amplification", `+${((n.tob||0)+(n.tob2||0))*15}%`],
+                ["Ultimate Boost",       `+${(n.ult||0)*30}%`],
+              ].map(([label,val])=>{
+                const hasVal=val!=="+0"&&val!=="+0%";
+                return (
+                  <div key={label} style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                    <span style={{color:C.textDim,fontSize:12}}>{label}</span>
+                    <span style={{color:hasVal?C.purpleLight:C.border,fontSize:12,fontFamily:"'Courier New',monospace"}}>{val}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div>
+              <p style={{...lbl,fontSize:10,marginBottom:8,color:C.green}}>CHOICES</p>
+              {[
+                ["ATK Speed / CDR", n.j1===null?"Not assigned":n.j1==="A"?"ATK Speed +40%":"Ability CDR −40%",  n.j1!==null],
+                ["Damage Type",     n.j2===null?"Not assigned":n.j2==="A"?"Primary DMG +50%":"Secondary DMG +50%", n.j2!==null],
+                ["Specialization",  n.j3===null?"Not assigned":n.j3==="A"?"Crit DMG ×150%":"Prec DMG ×200%",   n.j3!==null],
+              ].map(([label,val,hasVal])=>(
+                <div key={label} style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                  <span style={{color:C.textDim,fontSize:12}}>{label}</span>
+                  <span style={{color:hasVal?C.green:C.border,fontSize:12,fontFamily:"'Courier New',monospace"}}>{val}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Build Tab ─────────────────────────────────────────────────────────────────
 
-function BuildTab({ session, profiles, setProfiles, activeProfile, onProfileSwitch }) {
+function BuildTab({ session, profiles, setProfiles, activeProfile, onProfileSwitch, showSkillMigrationNotice, onDismissSkillMigrationNotice }) {
   const [reqs, setReqs] = useState(() => getReqs());
-  const [skills, setSkills] = useState(() => getSkills());
+  const [nodes, setNodes] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("bh:skills") || "{}");
+      if ("skillFlatHealth" in saved || "tdbSkill" in saved) return { ...DEFAULT_SKILLS };
+      return Object.keys(saved).length > 0 ? { ...DEFAULT_SKILLS, ...saved } : { ...DEFAULT_SKILLS };
+    } catch { return { ...DEFAULT_SKILLS }; }
+  });
   const [profileDirty, setProfileDirty] = useState(false);
   const [savedFeedback, setSavedFeedback] = useState(false);
 
   const updateReq = (k, v) => { setReqs(r => ({...r, [k]: parseFloat(v) || 0})); setProfileDirty(true); };
-  const updateSkill = (k, v) => { setSkills(s => ({...s, [k]: v})); setProfileDirty(true); };
+  const updateNode = (id, val) => { setNodes(prev => ({ ...prev, [id]: val })); setProfileDirty(true); };
 
   const saveProfile = () => {
     localStorage.setItem("bh:reqs", JSON.stringify(reqs));
-    localStorage.setItem("bh:skills", JSON.stringify(skills));
+    localStorage.setItem("bh:skills", JSON.stringify(nodes));
     const updatedProfiles = profiles.map((p, i) =>
-      i === activeProfile ? { index: i, skills, reqs } : p
+      i === activeProfile ? { index: i, skills: nodes, reqs } : p
     );
     setProfiles(updatedProfiles);
     setProfileDirty(false);
     setSavedFeedback(true);
     setTimeout(() => setSavedFeedback(false), 1500);
     if (session) {
-      saveUserConfig(skills, reqs, updatedProfiles).catch(err =>
+      saveUserConfig(nodes, reqs, updatedProfiles).catch(err =>
         console.error("[config] Failed to sync to Supabase:", err)
       );
     }
@@ -1670,86 +1965,30 @@ function BuildTab({ session, profiles, setProfiles, activeProfile, onProfileSwit
         </div>
       </div>
 
-      {/* Skill Configuration */}
+      {/* Skill Tree */}
       <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:"18px"}}>
-        <h3 style={{color:C.gold, margin:"0 0 16px", fontSize:15, letterSpacing:1.5}}>SKILL CONFIGURATION</h3>
+        <h3 style={{color:C.gold, margin:"0 0 14px", fontSize:15, letterSpacing:1.5}}>SKILL TREE</h3>
+        <SkillTreePanel
+          nodes={nodes}
+          onChange={updateNode}
+          migrationNotice={showSkillMigrationNotice}
+          onDismissMigration={onDismissSkillMigrationNotice}
+        />
+      </div>
 
-        {/* DAMAGE sub-section */}
-        <p style={{color:C.textDim, fontSize:11, letterSpacing:1.5, margin:"0 0 12px"}}>DAMAGE</p>
-        <div style={{display:"flex", flexDirection:"column", gap:14, marginBottom:16}}>
-          {[
-            {key:"cr",       label:"Critical Hit Rate",     unit:"%"},
-            {key:"cd",       label:"Critical Damage",       unit:"%"},
-            {key:"pr",       label:"Precision Rate",        unit:"%"},
-            {key:"pd",       label:"Precision Damage",      unit:"%"},
-            {key:"tdbSkill", label:"Total Damage Bonus",    unit:"%"},
-          ].map(({key, label, unit}) => (
-            <div key={key} style={{display:"flex", alignItems:"center", gap:10}}>
-              <label style={{...lbl, marginBottom:0, flex:1, fontSize:13}}>{label}</label>
-              <div style={{display:"flex", alignItems:"center", gap:8}}>
-                <input type="number" value={skills[key]} onChange={e => updateSkill(key, parseFloat(e.target.value) || 0)}
-                  onFocus={selectOnFocus}
-                  style={{...inp, width:95, textAlign:"right", padding:"11px 12px", fontSize:15}}/>
-                <span style={{color:C.textDim, fontSize:14, minWidth:18}}>{unit}</span>
-              </div>
-            </div>
-          ))}
+      {/* Boss Fight Priority */}
+      <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:"18px"}}>
+        <h3 style={{color:C.gold, margin:"0 0 14px", fontSize:15, letterSpacing:1.5}}>BOSS FIGHT PRIORITY</h3>
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8}}>
+          <label style={{...lbl, marginBottom:0, fontSize:13}}>Scoring Weight</label>
+          <span style={{color:C.gold, fontSize:15, fontWeight:700}}>{nodes.bossPriority ?? 50}%</span>
         </div>
-
-        {/* Damage Specialization toggle */}
-        <div style={{marginBottom:16}}>
-          <label style={{...lbl, fontSize:13, marginBottom:10}}>Damage Specialization</label>
-          <div style={{display:"flex", gap:8}}>
-            {[{val:2, label:"Precision Damage ×200%"}, {val:1.5, label:"Critical Damage ×150%"}].map(({val, label}) => (
-              <button key={val} onClick={() => updateSkill("pdMult", val)}
-                style={{flex:1, padding:"13px 0", background:skills.pdMult===val?"#130f00":"transparent", border:`2px solid ${skills.pdMult===val?C.gold:C.border}`, color:skills.pdMult===val?C.gold:C.textDim, borderRadius:10, cursor:"pointer", fontWeight:700, fontSize:12, fontFamily:"'Courier New',monospace"}}>
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Boss Fight Priority slider */}
-        <div style={{marginBottom:4}}>
-          <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8}}>
-            <label style={{...lbl, marginBottom:0, fontSize:13}}>Boss Fight Priority</label>
-            <span style={{color:C.gold, fontSize:15, fontWeight:700}}>{skills.bossPriority}%</span>
-          </div>
-          <input type="range" min={0} max={100} step={5} value={skills.bossPriority}
-            onChange={e => updateSkill("bossPriority", parseInt(e.target.value))}
-            style={{width:"100%", accentColor:C.gold, cursor:"pointer"}}/>
-          <div style={{display:"flex", justifyContent:"space-between", marginTop:4}}>
-            <span style={{color:C.textDim, fontSize:11}}>Mob Clearing</span>
-            <span style={{color:C.textDim, fontSize:11}}>Boss Fight</span>
-          </div>
-        </div>
-
-        {/* Divider */}
-        <div style={{borderTop:`1px solid ${C.border}`, margin:"20px 0"}}/>
-
-        {/* SURVIVABILITY sub-section */}
-        <p style={{color:C.textDim, fontSize:11, letterSpacing:1.5, margin:"0 0 12px"}}>SURVIVABILITY</p>
-        <div style={{display:"flex", flexDirection:"column", gap:14}}>
-          {[
-            {key:"skillFlatHealth",  label:"Flat Health",                  unit:""},
-            {key:"skillPctHealth",   label:"Percentage Max Health",        unit:"%"},
-            {key:"skillPctDmgRes",   label:"Percentage Damage Resistance", unit:"%"},
-            {key:"skillArmorValue",  label:"Armor Value",                  unit:""},
-            {key:"skillBlockRate",   label:"Block Rate",                   unit:"%"},
-            {key:"skillBlockDR",     label:"Block Damage Reduction",       unit:""},
-            {key:"skillDodgeRate",   label:"Dodge Rate",                   unit:"%"},
-          ].map(({key, label, unit}) => (
-            <div key={key} style={{display:"flex", alignItems:"center", gap:10}}>
-              <label style={{...lbl, marginBottom:0, flex:1, fontSize:13}}>{label}</label>
-              <div style={{display:"flex", alignItems:"center", gap:8}}>
-                <input type="number" value={skills[key] ?? 0}
-                  onChange={e => updateSkill(key, parseFloat(e.target.value) || 0)}
-                  onFocus={selectOnFocus}
-                  style={{...inp, width:95, textAlign:"right", padding:"11px 12px", fontSize:15}}/>
-                <span style={{color:C.textDim, fontSize:14, minWidth:18}}>{unit}</span>
-              </div>
-            </div>
-          ))}
+        <input type="range" min={0} max={100} step={5} value={nodes.bossPriority ?? 50}
+          onChange={e => updateNode("bossPriority", parseInt(e.target.value))}
+          style={{width:"100%", accentColor:C.gold, cursor:"pointer"}}/>
+        <div style={{display:"flex", justifyContent:"space-between", marginTop:4}}>
+          <span style={{color:C.textDim, fontSize:11}}>Mob Clearing</span>
+          <span style={{color:C.textDim, fontSize:11}}>Boss Fight</span>
         </div>
       </div>
 
@@ -2068,6 +2307,7 @@ export default function App() {
   const [showOnboarding,setShowOnboarding] = useState(false);
   const [onboardingStep,setOnboardingStep] = useState(0);
   const [lastDeleted,setLastDeleted] = useState(null);
+  const [showSkillMigrationNotice,setShowSkillMigrationNotice] = useState(false);
   const [debugEnabled,setDebugEnabled] = useState(() => localStorage.getItem("bh:debug") === "true");
   const [savedCombos,setSavedCombos] = useState(() => {
     try { const s=localStorage.getItem("bh:saved_combos"); return s?JSON.parse(s):[]; } catch { return []; }
@@ -2189,7 +2429,9 @@ export default function App() {
       const config = await fetchUserConfig();
       if (config) {
         if (config.skills && Object.keys(config.skills).length > 0) {
-          localStorage.setItem("bh:skills", JSON.stringify(config.skills));
+          const isOldFmt = "skillFlatHealth" in config.skills || "tdbSkill" in config.skills;
+          if (!isOldFmt) localStorage.setItem("bh:skills", JSON.stringify(config.skills));
+          else setShowSkillMigrationNotice(true);
         }
         if (config.reqs && Object.keys(config.reqs).length > 0) {
           localStorage.setItem("bh:reqs", JSON.stringify(config.reqs));
@@ -2203,7 +2445,9 @@ export default function App() {
           const activeIdx = parseInt(localStorage.getItem("bh:activeProfile") || "0");
           const activeP = savedProfiles[activeIdx];
           if (activeP) {
-            localStorage.setItem("bh:skills", JSON.stringify(activeP.skills));
+            const isOldFmt = activeP.skills && ("skillFlatHealth" in activeP.skills || "tdbSkill" in activeP.skills);
+            if (!isOldFmt) localStorage.setItem("bh:skills", JSON.stringify(activeP.skills));
+            else setShowSkillMigrationNotice(true);
             localStorage.setItem("bh:reqs", JSON.stringify(activeP.reqs));
           }
         } else {
@@ -2258,6 +2502,32 @@ export default function App() {
 
   // Clear pending undo timer on unmount
   useEffect(() => () => { if (lastDeleted?.timer) clearTimeout(lastDeleted.timer); }, [lastDeleted]);
+
+  // Detect old skill format on mount — clear and show migration notice
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("bh:skills");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if ("skillFlatHealth" in parsed || "tdbSkill" in parsed) {
+          localStorage.removeItem("bh:skills");
+          setShowSkillMigrationNotice(true);
+        }
+      }
+    } catch {}
+  }, []);
+
+  // Show onboarding on first visit
+  useEffect(() => {
+    if (!localStorage.getItem("bh:onboarded")) {
+      setShowOnboarding(true);
+    }
+  }, []);
+
+  const closeOnboarding = () => {
+    localStorage.setItem("bh:onboarded", "1");
+    setShowOnboarding(false);
+  };
 
   // ── Key management ──────────────────────────────────────────────────────────
 
@@ -2586,7 +2856,7 @@ export default function App() {
         {tab==="add"&&<AddTab form={form} setForm={setForm} addItem={addItem} flash={flash} onBulkImport={bulkImport} items={items} user={user} session={session} onSignIn={handleShowAuth}/>}
         {tab==="inventory"&&<InventoryTab items={displayItems} allItems={items} filterType={filterType} setFilterType={setFilterType} deleteItem={deleteItem} counts={counts} onExport={setExportJson} onRestoreAll={restoreAll} user={user} forced={forced} toggleForce={toggleForce} deletionCandidates={deletionCandidates} deletionIds={deletionIds} deletionRan={deletionRan} isAnalyzing={isAnalyzing} runDeletionAnalysis={runDeletionAnalysis} optimResult={optimResult}/>}
         {tab==="optimize"&&<OptimizeTab result={optimResult} runOptimize={runOptimize} counts={counts} savedCombos={savedCombos} saveCombo={saveCombo} deleteCombo={deleteCombo} forced={forced} toggleForce={toggleForce}/>}
-        {tab==="build"&&<BuildTab key={activeProfile} session={session} profiles={profiles} setProfiles={setProfiles} activeProfile={activeProfile} onProfileSwitch={onProfileSwitch}/>}
+        {tab==="build"&&<BuildTab key={activeProfile} session={session} profiles={profiles} setProfiles={setProfiles} activeProfile={activeProfile} onProfileSwitch={onProfileSwitch} showSkillMigrationNotice={showSkillMigrationNotice} onDismissSkillMigrationNotice={()=>setShowSkillMigrationNotice(false)}/>}
       </div>
 
       {/* Undo delete toast */}
@@ -2647,7 +2917,7 @@ export default function App() {
             {/* Header */}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 20px",borderBottom:`1px solid ${C.border}`}}>
               <span style={{color:C.textDim,fontSize:12,letterSpacing:1.5}}>{onboardingStep+1} OF {ONBOARDING_STEPS.length}</span>
-              <button onClick={()=>setShowOnboarding(false)} style={{background:"transparent",border:"none",color:C.textDim,fontSize:20,cursor:"pointer",lineHeight:1,padding:"0 4px"}}>×</button>
+              <button onClick={closeOnboarding} style={{background:"transparent",border:"none",color:C.textDim,fontSize:20,cursor:"pointer",lineHeight:1,padding:"0 4px"}}>×</button>
             </div>
             {/* Content */}
             <div style={{padding:"24px 20px",overflowY:"auto",maxHeight:"60vh"}}>
@@ -2671,7 +2941,7 @@ export default function App() {
               {onboardingStep<ONBOARDING_STEPS.length-1?(
                 <button onClick={()=>setOnboardingStep(s=>s+1)} style={{flex:2,padding:"13px 0",background:"#130f00",border:`1.5px solid ${C.gold}`,borderRadius:10,color:C.gold,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>Next →</button>
               ):(
-                <button onClick={()=>setShowOnboarding(false)} style={{flex:2,padding:"13px 0",background:C.greenDim,border:`1.5px solid ${C.green}`,borderRadius:10,color:C.green,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>✓ Got it</button>
+                <button onClick={closeOnboarding} style={{flex:2,padding:"13px 0",background:C.greenDim,border:`1.5px solid ${C.green}`,borderRadius:10,color:C.green,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>✓ Got it</button>
               )}
             </div>
           </div>
