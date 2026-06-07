@@ -2423,6 +2423,18 @@ export default function App() {
     } catch {}
   }, []);
 
+  // Show onboarding on first visit
+  useEffect(() => {
+    if (!localStorage.getItem("bh:onboarded")) {
+      setShowOnboarding(true);
+    }
+  }, []);
+
+  const closeOnboarding = () => {
+    localStorage.setItem("bh:onboarded", "1");
+    setShowOnboarding(false);
+  };
+
   // ── Key management ──────────────────────────────────────────────────────────
 
   const saveApiKey = async () => {
@@ -2811,7 +2823,7 @@ export default function App() {
             {/* Header */}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 20px",borderBottom:`1px solid ${C.border}`}}>
               <span style={{color:C.textDim,fontSize:12,letterSpacing:1.5}}>{onboardingStep+1} OF {ONBOARDING_STEPS.length}</span>
-              <button onClick={()=>setShowOnboarding(false)} style={{background:"transparent",border:"none",color:C.textDim,fontSize:20,cursor:"pointer",lineHeight:1,padding:"0 4px"}}>×</button>
+              <button onClick={closeOnboarding} style={{background:"transparent",border:"none",color:C.textDim,fontSize:20,cursor:"pointer",lineHeight:1,padding:"0 4px"}}>×</button>
             </div>
             {/* Content */}
             <div style={{padding:"24px 20px",overflowY:"auto",maxHeight:"60vh"}}>
@@ -2835,7 +2847,7 @@ export default function App() {
               {onboardingStep<ONBOARDING_STEPS.length-1?(
                 <button onClick={()=>setOnboardingStep(s=>s+1)} style={{flex:2,padding:"13px 0",background:"#130f00",border:`1.5px solid ${C.gold}`,borderRadius:10,color:C.gold,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>Next →</button>
               ):(
-                <button onClick={()=>setShowOnboarding(false)} style={{flex:2,padding:"13px 0",background:C.greenDim,border:`1.5px solid ${C.green}`,borderRadius:10,color:C.green,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>✓ Got it</button>
+                <button onClick={closeOnboarding} style={{flex:2,padding:"13px 0",background:C.greenDim,border:`1.5px solid ${C.green}`,borderRadius:10,color:C.green,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:"'Courier New',monospace"}}>✓ Got it</button>
               )}
             </div>
           </div>
