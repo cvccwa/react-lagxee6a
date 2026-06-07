@@ -1700,7 +1700,8 @@ function SkillTreePanel({ nodes, onChange, migrationNotice, onDismissMigration }
         )}
       </div>
 
-      {/* Two-column layout */}
+      {/* Two-column layout — bounded scroll container */}
+      <div style={{maxHeight:"58vh",overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
       <div style={{display:"flex"}}>
 
         {/* Left: Stat skills */}
@@ -1758,9 +1759,10 @@ function SkillTreePanel({ nodes, onChange, migrationNotice, onDismissMigration }
           })}
         </div>
 
-        {/* Right: Rune Awakening */}
-        <div style={{width:150,flexShrink:0,paddingLeft:6}}>
-          <p style={{...lbl,fontSize:10,marginBottom:8}}>RUNE</p>
+        {/* Right: Rune Awakening — space-between to span stat column height */}
+        <div style={{width:150,flexShrink:0,paddingLeft:6,display:"flex",flexDirection:"column"}}>
+          <p style={{...lbl,fontSize:10,marginBottom:8,flexShrink:0}}>RUNE</p>
+          <div style={{display:"flex",flexDirection:"column",justifyContent:"space-between",flex:1}}>
           {RUNE_SKILLS.map(sk=>{
             const cur=nodes[sk.id]||0;
             const hasPoints=cur>0;
@@ -1771,7 +1773,7 @@ function SkillTreePanel({ nodes, onChange, migrationNotice, onDismissMigration }
                 style={{width:"100%",textAlign:"left",cursor:"pointer",
                   background:hasPoints?"#1a0f35":C.surface,
                   border:`1px solid ${hasPoints?C.gold:C.border}`,
-                  borderRadius:10,padding:"8px 10px",marginBottom:2,
+                  borderRadius:10,padding:"8px 10px",
                   boxShadow:hasPoints?`0 0 6px ${C.gold}22`:"none",
                   transition:"all 0.15s",opacity:blocked?0.35:1}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
@@ -1785,8 +1787,10 @@ function SkillTreePanel({ nodes, onChange, migrationNotice, onDismissMigration }
               </button>
             );
           })}
+          </div>
         </div>
       </div>
+      </div>{/* end scroll container */}
 
       {/* Derived Values */}
       <div style={{marginTop:14,borderTop:`1px solid ${C.border}`,paddingTop:12}}>
