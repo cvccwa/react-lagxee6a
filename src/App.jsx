@@ -11,7 +11,7 @@ import {
   BASE_BLOCK_RATE_AMULET, THOR_BASE_HEALTH, RUNIC_ARMOR_BASE_HEALTH, RUNIC_ARMOR_BASE_ARMOR,
   ENRAGE_TIMER,
 } from "./config.js";
-import { optimize, findDeletionCandidates, scoreCombo, getReqs, checkReqs, getSkills, comboEnhTotal, itemStatValue } from "./scoring.js";
+import { optimize, findDeletionCandidates, scoreCombo, getReqs, checkReqs, getSkills, deriveSkills, comboEnhTotal, itemStatValue } from "./scoring.js";
 import {
   fileToBase64, scanGearCard, compressItem, decompressItem,
   fetchInventory, addInventoryItem, deleteInventoryItem, migrateInventoryToSupabase,
@@ -20,7 +20,7 @@ import {
 } from "./api.js";
 import { supabase } from "./supabase.js";
 
-const APP_VERSION = "1.5.2";
+const APP_VERSION = "1.5.3";
 
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
@@ -940,9 +940,9 @@ function getSamplePoints(total_armor_value, total_health) {
   return cutoffIndex === -1 ? allPoints : allPoints.slice(0, cutoffIndex + 1);
 }
 
-function getSurvivabilityStats(weapon, accessory, exclusive, armor) {
+function getSurvivabilityStats(weapon, accessory, exclusive, armor, skills = null) {
   const combo = [weapon, accessory, exclusive, armor].filter(Boolean);
-  const skills = getSkills();
+  skills = skills || getSkills();
 
   const getGearTotal = (statName) => {
     let total = 0;
@@ -1028,12 +1028,12 @@ function buildComparisonData(primaryStats, secondaryStats = null) {
   });
 }
 
-function optimizeArmor(armorPieces, weapon, accessory, exclusive) {
+function optimizeArmor(armorPieces, weapon, accessory, exclusive, skills = null) {
   if (!armorPieces.length) return null;
   let bestArmor = null;
   let bestEffectiveHP = -1;
   for (const armor of armorPieces) {
-    const stats = getSurvivabilityStats(weapon, accessory, exclusive, armor);
+    const stats = getSurvivabilityStats(weapon, accessory, exclusive, armor, skills);
     const { effective_hp } = computeEffectiveHP(stats);
     if (effective_hp > bestEffectiveHP) {
       bestEffectiveHP = effective_hp;
@@ -1080,25 +1080,26 @@ function getDPSCurveData(field_DPS, single_zap) {
   }));
 }
 
-function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, deleteCombo, forced, toggleForce}) {
+function OptimizeTab({results, activeResultProfile, setActiveResultProfile, runOptimize, counts, savedCombos, saveCombo, deleteCombo, forced, toggleForce, isCalculating, hasCalculated, profiles}) {
   const [showBuildInfo, setShowBuildInfo] = useState(false);
   const [showCurve, setShowCurve] = useState(false);
   const [showDPSCurve, setShowDPSCurve] = useState(false);
-  const [activeTab, setActiveTab] = useState("current");
+  const [activeTab, setActiveTab] = useState("p1");
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveName, setSaveName] = useState("");
-  const [isCalculating, setIsCalculating] = useState(false);
-  const [hasCalculated, setHasCalculated] = useState(false);
   const hasAll = counts.Weapon > 0 && counts.Accessory > 0 && counts.Exclusive > 0;
+
+  const result = results[activeResultProfile];
+
+  const getSkillsForProfile = (profileIndex) => {
+    const profile = profiles[profileIndex];
+    if (!profile?.skills) return getSkills();
+    return deriveSkills({ ...DEFAULT_SKILLS, ...profile.skills });
+  };
 
   const handleOptimize = () => {
     if (!hasAll || isCalculating) return;
-    setIsCalculating(true);
-    setTimeout(() => {
-      runOptimize();
-      setIsCalculating(false);
-      setHasCalculated(true);
-    }, 50);
+    runOptimize();
   };
 
   const getComboItems = (combo) => ({
@@ -1107,10 +1108,12 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
     exclusive: decompressItem(combo.e),
   });
 
-  const getStatTotals = (w, a, e) => {
+  const getStatTotals = (w, a, e, skills) => {
     const combo = [w, a, e];
-    const skills = getSkills();
-    const pr_gear = comboEnhTotal(combo, "Precision Rate");
+    const reqs = getReqs();
+    const reqResult = checkReqs(w, a, e, reqs, skills);
+    const tob_check = reqResult.checks.find(c => c.key === "tob_min");
+    const pr_check  = reqResult.checks.find(c => c.key === "pr_min");
     const pd_gear = comboEnhTotal(combo, "Precision Damage");
     const cr_gear = comboEnhTotal(combo, "Critical Hit Rate");
     const cd_gear = comboEnhTotal(combo, "Critical Damage");
@@ -1119,18 +1122,21 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
     const tob_e = itemStatValue(e, "Total Output Boost");
     const tdb = comboEnhTotal(combo, "Total Damage Bonus");
     const boss = comboEnhTotal(combo, "Bonus Damage vs Bosses");
-    const displayed_tob = Math.round(278 + 11.5 * Math.sqrt(tob_w) + 11.5 * Math.sqrt(tob_a) + 11.5 * Math.sqrt(tob_e));
+    const pr_gear = comboEnhTotal(combo, "Precision Rate");
+    const displayed_tob = Math.round(skills.skillTOB_arcane + skills.skillTOB_nodes
+      + 11.5 * Math.sqrt(tob_w) + 11.5 * Math.sqrt(tob_a) + 11.5 * Math.sqrt(tob_e));
     const pr_total = Math.round((1 + skills.pr + pr_gear) * 10) / 10;
     const pd_total = Math.round((800 + skills.pd + pd_gear) * skills.pdMult);
     const cr_total = Math.round((5 + skills.cr + 16.2 + cr_gear) * 10) / 10;
-    const cd_total = Math.round((150 + skills.cd + cd_gear) * (skills.pdMult === 2 ? 1 : 1.5));
+    const cd_total = Math.round((150 + skills.cd + cd_gear) * skills.cdMult);
     return { pr_total, pd_total, cr_total, cd_total, displayed_tob, tdb, boss };
   };
 
-  const renderComboPanel = (w, a, e, reqResult, isCurrent, savedCombo = null, currentResult = null) => {
+  const renderComboPanel = (w, a, e, reqResult, isCurrent, savedCombo = null, currentResult = null, panelSkills = null) => {
+    const skills = panelSkills || getSkillsForProfile(activeResultProfile);
     const reqs = getReqs();
-    const displayedReqResult = reqResult || checkReqs(w, a, e, reqs);
-    const stats = getStatTotals(w, a, e);
+    const displayedReqResult = reqResult || checkReqs(w, a, e, reqs, skills);
+    const stats = getStatTotals(w, a, e, skills);
     const savedArmor = (!isCurrent && savedCombo?.ar) ? decompressItem(savedCombo.ar) : null;
     const armorForPanel = isCurrent
       ? (result?.armorResult?.armor ?? null)
@@ -1139,10 +1145,23 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
       <div style={{display:"flex", flexDirection:"column", gap:12}}>
         {/* BUILD INFO collapsible */}
         <div style={{background:C.surface, border:`1px solid #2a1a3a`, borderRadius:12, overflow:"hidden"}}>
-          <button onClick={() => setShowBuildInfo(s => !s)} style={{width:"100%", padding:"14px 16px", background:"transparent", border:"none", display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer"}}>
+          <div onClick={() => setShowBuildInfo(s => !s)} style={{width:"100%", padding:"14px 16px", display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer"}}>
             <span style={{color:C.gold, fontSize:14, fontWeight:700, letterSpacing:1}}>ℹ BUILD INFO</span>
-            <span style={{color:C.textDim, fontSize:16}}>{showBuildInfo ? "▲" : "▼"}</span>
-          </button>
+            <div style={{display:"flex", gap:6, alignItems:"center"}} onClick={ev => ev.stopPropagation()}>
+              {[0,1].map(idx => (
+                <button key={idx} onClick={() => setActiveResultProfile(idx)}
+                  style={{padding:"4px 10px", borderRadius:6,
+                    background: activeResultProfile===idx ? "#130f00" : "transparent",
+                    border:`1.5px solid ${activeResultProfile===idx ? C.gold : C.border}`,
+                    color: activeResultProfile===idx ? C.gold : C.textDim,
+                    fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"'Courier New',monospace",
+                    opacity: results[idx] ? 1 : 0.4}}>
+                  P{idx+1}
+                </button>
+              ))}
+              <span style={{color:C.textDim, fontSize:16, marginLeft:4}}>{showBuildInfo ? "▲" : "▼"}</span>
+            </div>
+          </div>
           {showBuildInfo && (
             <div style={{padding:"0 16px 16px", display:"flex", flexDirection:"column", gap:16}}>
 
@@ -1150,7 +1169,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
               {!isCurrent && savedCombo && (
                 <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", paddingBottom:12, borderBottom:`1px solid ${C.border}`, marginBottom:4}}>
                   <span style={{color:C.textDim, fontSize:13}}>Saved {savedCombo.savedAt}</span>
-                  <button onClick={() => { deleteCombo(savedCombo.name); setActiveTab("current"); }} style={{background:"transparent", border:`1px solid #3a1010`, color:"#884444", borderRadius:6, padding:"6px 12px", cursor:"pointer", fontSize:12, fontFamily:"'Courier New',monospace"}}>✕ Delete</button>
+                  <button onClick={() => { deleteCombo(savedCombo.name); setActiveTab("p1"); }} style={{background:"transparent", border:`1px solid #3a1010`, color:"#884444", borderRadius:6, padding:"6px 12px", cursor:"pointer", fontSize:12, fontFamily:"'Courier New',monospace"}}>✕ Delete</button>
                 </div>
               )}
 
@@ -1193,10 +1212,10 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
 
               {/* DPS Curve — collapsible, between Damage Stats and Survivability */}
               {(() => {
-                const primaryScore = scoreCombo(w, a, e, getSkills());
+                const primaryScore = scoreCombo(w, a, e, skills);
                 const { field_DPS: primaryDPS, single_zap: primaryZap } = primaryScore;
                 const secondaryScore = (!isCurrent && currentResult)
-                  ? scoreCombo(currentResult.weapon, currentResult.accessory, currentResult.exclusive, getSkills())
+                  ? scoreCombo(currentResult.weapon, currentResult.accessory, currentResult.exclusive, skills)
                   : null;
                 const secondaryDPS = secondaryScore?.field_DPS ?? null;
                 return (
@@ -1302,7 +1321,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
 
               {/* Survivability */}
               {(() => {
-                const sv = getSurvivabilityStats(w, a, e, armorForPanel);
+                const sv = getSurvivabilityStats(w, a, e, armorForPanel, skills);
                 const statRows = [
                   { label:"Total Health",         value: Math.round(sv.total_health).toLocaleString() },
                   { label:"Armor Value",          value: sv.total_armor_value > 0 ? String(sv.total_armor_value) : null },
@@ -1330,7 +1349,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
 
               {/* Effective HP + curve */}
               {(() => {
-                const survStats = getSurvivabilityStats(w, a, e, armorForPanel);
+                const survStats = getSurvivabilityStats(w, a, e, armorForPanel, skills);
                 const { effective_hp } = computeEffectiveHP(survStats);
                 const secondarySurvStats = (!isCurrent && currentResult)
                   ? getSurvivabilityStats(
@@ -1500,17 +1519,25 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
         </div>
 
         {/* Tab strip — scrollable */}
-        {(result || savedCombos.length > 0) && (
+        {(results.some(Boolean) || savedCombos.length > 0) && (
           <div className="tab-strip" style={{display:"flex", overflowX:"auto", border:`1px solid ${C.border}`, borderRadius:10, scrollbarWidth:"none", msOverflowStyle:"none"}}>
-            <button onClick={() => setActiveTab("current")} style={{flexShrink:0, minWidth:"30%", padding:"11px 8px", background:activeTab==="current"?C.surface:"transparent", border:"none", borderBottom:`2px solid ${activeTab==="current"?C.gold:"transparent"}`, color:activeTab==="current"?C.gold:C.textDim, fontFamily:"'Courier New',monospace", fontSize:12, cursor:"pointer", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
-              Current
-            </button>
+            {["p1","p2"].map((id, idx) => (
+              <button key={id} onClick={() => { setActiveTab(id); setActiveResultProfile(idx); }}
+                style={{flexShrink:0, minWidth:"25%", padding:"11px 8px",
+                  background:activeTab===id?C.surface:"transparent", border:"none",
+                  borderBottom:`2px solid ${activeTab===id?C.gold:"transparent"}`,
+                  borderLeft: idx===1 ? `1px solid ${C.border}` : "none",
+                  color:activeTab===id?C.gold:C.textDim, fontFamily:"'Courier New',monospace",
+                  fontSize:12, cursor:"pointer", opacity:results[idx]?1:0.5}}>
+                Profile {idx+1}
+              </button>
+            ))}
             {savedCombos.map(c => (
-              <button key={c.name} onClick={() => setActiveTab(c.name)} style={{flexShrink:0, minWidth:"30%", padding:"11px 8px", background:activeTab===c.name?C.surface:"transparent", border:"none", borderBottom:`2px solid ${activeTab===c.name?C.gold:"transparent"}`, borderLeft:`1px solid ${C.border}`, color:activeTab===c.name?C.gold:C.textDim, fontFamily:"'Courier New',monospace", fontSize:12, cursor:"pointer", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+              <button key={c.name} onClick={() => setActiveTab(c.name)} style={{flexShrink:0, minWidth:"25%", padding:"11px 8px", background:activeTab===c.name?C.surface:"transparent", border:"none", borderBottom:`2px solid ${activeTab===c.name?C.gold:"transparent"}`, borderLeft:`1px solid ${C.border}`, color:activeTab===c.name?C.gold:C.textDim, fontFamily:"'Courier New',monospace", fontSize:12, cursor:"pointer", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
                 {c.name}
               </button>
             ))}
-            {result && (
+            {results.some(Boolean) && (
               <button onClick={() => {setSaveName(""); setShowSaveModal(true);}} style={{flexShrink:0, padding:"11px 14px", background:"transparent", border:"none", borderLeft:`1px solid ${C.border}`, color:C.textDim, cursor:"pointer", fontSize:18}}>
                 +
               </button>
@@ -1521,25 +1548,31 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
 
       {/* Scrollable content */}
       <div style={{flex:1, overflowY:"auto", minHeight:0}}>
-        {!result && savedCombos.length === 0 ? (
+        {!results.some(Boolean) && savedCombos.length === 0 ? (
           <div style={{display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", height:"100%", color:C.textDim, textAlign:"center", padding:"0 20px"}}>
             <div style={{fontSize:52, marginBottom:18}}>⚡</div>
             <p style={{margin:0, fontSize:18, fontWeight:700, color:hasAll?C.text:C.textDim}}>
               {hasAll ? "Tap the button above to find your optimal build" : "Add gear to all 3 slots, then optimize"}
             </p>
           </div>
-        ) : activeTab === "current" ? (
-          result ? renderComboPanel(result.weapon, result.accessory, result.exclusive, result.reqResult, true) : (
-            <div style={{textAlign:"center", padding:"40px 20px", color:C.textDim}}>
-              <p style={{fontSize:15}}>Run the optimizer to see your current build.</p>
-            </div>
-          )
-        ) : (
+        ) : (activeTab === "p1" || activeTab === "p2") ? (() => {
+          const profileIdx = activeTab === "p2" ? 1 : 0;
+          const profileResult = results[profileIdx];
+          const profileSkills = getSkillsForProfile(profileIdx);
+          return profileResult
+            ? renderComboPanel(profileResult.weapon, profileResult.accessory, profileResult.exclusive, profileResult.reqResult, true, null, null, profileSkills)
+            : (
+              <div style={{textAlign:"center", padding:"40px 20px", color:C.textDim}}>
+                <p style={{fontSize:15}}>Profile {profileIdx+1} result not available — run the optimizer.</p>
+              </div>
+            );
+        })() : (
           (() => {
             const saved = savedCombos.find(c => c.name === activeTab);
             if (!saved) return null;
             const { weapon, accessory, exclusive } = getComboItems(saved);
-            return renderComboPanel(weapon, accessory, exclusive, null, false, saved, result);
+            const profileSkills = getSkillsForProfile(activeResultProfile);
+            return renderComboPanel(weapon, accessory, exclusive, null, false, saved, result, profileSkills);
           })()
         )}
       </div>
@@ -1560,7 +1593,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
             <div style={{display:"flex", gap:10}}>
               <button onClick={() => setShowSaveModal(false)} style={{flex:1, padding:"14px 0", background:"transparent", border:`1.5px solid ${C.border}`, borderRadius:10, color:C.textDim, fontWeight:700, fontSize:14, cursor:"pointer", fontFamily:"'Courier New',monospace"}}>Cancel</button>
               <button
-                onClick={() => { if (saveName.trim()) { saveCombo(saveName.trim()); setActiveTab(saveName.trim()); setShowSaveModal(false); }}}
+                onClick={() => { if (saveName.trim()) { saveCombo(saveName.trim(), result); setActiveTab(saveName.trim()); setShowSaveModal(false); }}}
                 disabled={!saveName.trim()}
                 style={{flex:2, padding:"14px 0", background:saveName.trim()?C.greenDim:"#111", border:`1.5px solid ${saveName.trim()?C.green:"#333"}`, borderRadius:10, color:saveName.trim()?C.green:"#555", fontWeight:700, fontSize:14, cursor:saveName.trim()?"pointer":"not-allowed", fontFamily:"'Courier New',monospace"}}
               >
@@ -2315,7 +2348,11 @@ export default function App() {
   const [form,setForm] = useState(blankForm());
   const [loading,setLoading] = useState(true);
   const [filterType,setFilterType] = useState("All");
-  const [optimResult,setOptimResult] = useState(null);
+  const [optimResults,setOptimResults] = useState([null, null]);
+  const [activeResultProfile,setActiveResultProfile] = useState(0);
+  const [isCalculating,setIsCalculating] = useState(false);
+  const [hasCalculated,setHasCalculated] = useState(false);
+  const optimResult = optimResults[activeResultProfile];
   const [flash,setFlash] = useState(false);
   const [,setExportJson] = useState("");
   const [showSettings,setShowSettings] = useState(false);
@@ -2606,16 +2643,17 @@ export default function App() {
 
   // ── Inventory handlers ──────────────────────────────────────────────────────
 
-  const saveCombo = async (name) => {
-    if (!optimResult) return;
+  const saveCombo = async (name, resultToSave) => {
+    const r = resultToSave || optimResult;
+    if (!r) return;
     const combo = {
       v: COMBO_VERSION,
       name,
       savedAt: new Date().toLocaleDateString(),
-      w: compressItem(optimResult.weapon),
-      a: compressItem(optimResult.accessory),
-      e: compressItem(optimResult.exclusive),
-      ar: optimResult.armorResult?.armor ? compressItem(optimResult.armorResult.armor) : null,
+      w: compressItem(r.weapon),
+      a: compressItem(r.accessory),
+      e: compressItem(r.exclusive),
+      ar: r.armorResult?.armor ? compressItem(r.armorResult.armor) : null,
     };
     const next = [...savedCombos.filter(c => c.name !== name), combo];
     setSavedCombos(next);
@@ -2649,7 +2687,7 @@ export default function App() {
     const {added} = dedupeAgainstExisting([{...newItem, id:"temp"}], items);
     if (!added.length) return;
     setForm(blankForm(form.type));
-    setOptimResult(null);
+    setOptimResults([null, null]);
     setDeletionCandidates([]); setDeletionRan(false);
     setFlash(true); setTimeout(()=>setFlash(false),1000);
     if (session) {
@@ -2699,12 +2737,12 @@ export default function App() {
         localStorage.setItem("bh:pending", JSON.stringify(pending));
       } catch {}
     }
-    setOptimResult(null);
+    setOptimResults([null, null]);
   };
 
   const restoreAll = parsed => {
     const newItems=parsed.map(i=>({id:i.id||`${Date.now()}${Math.random().toString(36).slice(2)}`,type:i.type,name:i.name,rating:+i.rating,extendedEffects:(i.extendedEffects||[]).filter(e=>e.stat)}));
-    setItems(newItems); persist(newItems); setOptimResult(null);
+    setItems(newItems); persist(newItems); setOptimResults([null, null]);
   };
 
   const deleteItem = (id) => {
@@ -2733,7 +2771,7 @@ export default function App() {
     const newItems = items.filter(i => i.id !== id);
     setItems(newItems);
     localStorage.setItem("bh:gear:v1", JSON.stringify(newItems));
-    setOptimResult(null);
+    setOptimResults([null, null]);
     setDeletionCandidates([]); setDeletionRan(false);
 
     // Delay Supabase delete — give user 4s to undo
@@ -2765,14 +2803,16 @@ export default function App() {
     localStorage.setItem("bh:reqs", JSON.stringify(newProfile.reqs));
     localStorage.setItem("bh:activeProfile", String(newIdx));
     setActiveProfile(newIdx);
-    setOptimResult(null);
+    setOptimResults([null, null]);
   };
 
   const runDeletionAnalysis = () => {
     if (!optimResult) return;
     setIsAnalyzing(true);
     setTimeout(() => {
-      const candidates = findDeletionCandidates(items, optimResult.score, getReqs(), getSkills());
+      const skills = getSkillsForProfile(activeResultProfile);
+      const reqs   = getReqsForProfile(activeResultProfile);
+      const candidates = findDeletionCandidates(items, optimResult.score, reqs, skills);
       setDeletionCandidates(candidates);
       setDeletionRan(true);
       setIsAnalyzing(false);
@@ -2792,32 +2832,53 @@ export default function App() {
     });
   };
 
+  const getSkillsForProfile = (profileIndex) => {
+    const profile = profiles[profileIndex];
+    if (!profile?.skills) return getSkills();
+    return deriveSkills({ ...DEFAULT_SKILLS, ...profile.skills });
+  };
+
+  const getReqsForProfile = (profileIndex) => {
+    const profile = profiles[profileIndex];
+    if (!profile?.reqs) return getReqs();
+    return { ...DEFAULT_REQS, ...profile.reqs };
+  };
+
   const runOptimize = () => {
+    setIsCalculating(true);
     setDeletionCandidates([]);
     setDeletionRan(false);
-    const dpsResult = optimize(
-      items.filter(i => i.type === "Weapon"),
-      items.filter(i => i.type === "Accessory"),
-      items.filter(i => i.type === "Exclusive"),
-      forced
-    );
-    if (!dpsResult) return;
+    setTimeout(() => {
+      const results = [null, null];
+      const weapons    = items.filter(i => i.type === "Weapon");
+      const accessories = items.filter(i => i.type === "Accessory");
+      const exclusives = items.filter(i => i.type === "Exclusive");
+      const armors     = items.filter(i => i.type === "Armor");
 
-    let armorResult = null;
-    if (forced.Armor) {
-      const forcedArmor = items.find(i => i.id === forced.Armor);
-      if (forcedArmor) {
-        const stats = getSurvivabilityStats(dpsResult.weapon, dpsResult.accessory, dpsResult.exclusive, forcedArmor);
-        armorResult = { armor: forcedArmor, effectiveHP: computeEffectiveHP(stats).effective_hp };
+      for (let profileIdx = 0; profileIdx < 2; profileIdx++) {
+        const skills = getSkillsForProfile(profileIdx);
+        const reqs   = getReqsForProfile(profileIdx);
+        const dpsResult = optimize(weapons, accessories, exclusives, reqs, forced, skills);
+        if (!dpsResult) continue;
+
+        let armorResult = null;
+        if (forced.Armor) {
+          const forcedArmor = items.find(i => i.id === forced.Armor);
+          if (forcedArmor) {
+            const stats = getSurvivabilityStats(dpsResult.weapon, dpsResult.accessory, dpsResult.exclusive, forcedArmor, skills);
+            armorResult = { armor: forcedArmor, effectiveHP: computeEffectiveHP(stats).effective_hp };
+          }
+        } else {
+          armorResult = optimizeArmor(armors, dpsResult.weapon, dpsResult.accessory, dpsResult.exclusive, skills);
+        }
+
+        results[profileIdx] = { ...dpsResult, armorResult };
       }
-    } else {
-      armorResult = optimizeArmor(
-        items.filter(i => i.type === "Armor"),
-        dpsResult.weapon, dpsResult.accessory, dpsResult.exclusive
-      );
-    }
 
-    setOptimResult({ ...dpsResult, armorResult });
+      setOptimResults(results);
+      setIsCalculating(false);
+      setHasCalculated(true);
+    }, 50);
   };
 
   const handleSignOut = async () => {
@@ -2870,7 +2931,7 @@ export default function App() {
       <div style={{flex:1,overflow:"hidden",padding:"16px 16px 0",display:"flex",flexDirection:"column",minHeight:0}}>
         {tab==="add"&&<AddTab form={form} setForm={setForm} addItem={addItem} flash={flash} onBulkImport={bulkImport} items={items} user={user} session={session} onSignIn={handleShowAuth}/>}
         {tab==="inventory"&&<InventoryTab items={displayItems} allItems={items} filterType={filterType} setFilterType={setFilterType} deleteItem={deleteItem} counts={counts} onExport={setExportJson} onRestoreAll={restoreAll} user={user} forced={forced} toggleForce={toggleForce} deletionCandidates={deletionCandidates} deletionIds={deletionIds} deletionRan={deletionRan} isAnalyzing={isAnalyzing} runDeletionAnalysis={runDeletionAnalysis} optimResult={optimResult}/>}
-        {tab==="optimize"&&<OptimizeTab result={optimResult} runOptimize={runOptimize} counts={counts} savedCombos={savedCombos} saveCombo={saveCombo} deleteCombo={deleteCombo} forced={forced} toggleForce={toggleForce}/>}
+        {tab==="optimize"&&<OptimizeTab results={optimResults} activeResultProfile={activeResultProfile} setActiveResultProfile={setActiveResultProfile} runOptimize={runOptimize} counts={counts} savedCombos={savedCombos} saveCombo={saveCombo} deleteCombo={deleteCombo} forced={forced} toggleForce={toggleForce} isCalculating={isCalculating} hasCalculated={hasCalculated} profiles={profiles}/>}
         {tab==="build"&&<BuildTab key={activeProfile} session={session} profiles={profiles} setProfiles={setProfiles} activeProfile={activeProfile} onProfileSwitch={onProfileSwitch} showSkillMigrationNotice={showSkillMigrationNotice} onDismissSkillMigrationNotice={()=>setShowSkillMigrationNotice(false)}/>}
       </div>
 

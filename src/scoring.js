@@ -14,74 +14,47 @@ const BASE_MB_PROJ_DAMAGE = 20869; // 70 base + 20000 Gaea Sigil base effect + 7
 const HVF_COEFFICIENT     = 49 / 90; // Fixed scaling coefficient for HVF→zap conversion, confirmed by community spreadsheet
 const BASE_CR_AMULET      = 16.2;  // Alchemy Amulet base effect — fixed on all Amulets, not in extendedEffects
 
-// Read skill config from localStorage and derive formula-facing values from per-node ranks.
-// Returns the same keys as before so scoreCombo/checkReqs/getSurvivabilityStats need no changes.
-export function getSkills() {
-  try {
-    const saved = localStorage.getItem("bh:skills");
-    const raw = saved ? JSON.parse(saved) : {};
-    // Old format detection — fall back to defaults so formula isn't broken
-    const isOldFormat = "skillFlatHealth" in raw || "tdbSkill" in raw;
-    const n = isOldFormat ? { ...DEFAULT_SKILLS } : { ...DEFAULT_SKILLS, ...raw };
-
-    const j3 = n.j3;
-    const pdMult = j3 === "B" ? 2.0 : 1.0;  // Prec DMG ×200% only when j3="B"
-    const cdMult = j3 === "A" ? 1.5 : 1.0;  // Crit DMG ×150% only when j3="A"
-    const j1AtkBonus = n.j1 === "A" ? 40 : 0;
-
-    return {
-      // Core DPS stats
-      cr:               (n.cr     || 0) * 3,
-      cd:               (n.cd     || 0) * 30,
-      pr:               (n.pr     || 0) * 1,
-      pd:               (n.pd     || 0) * 175,
-      pdMult,
-      cdMult,
-      // j2 "B" = Secondary/Ability DMG +50%, folds into tdbSkill (same additive bracket)
-      tdbSkill:         (n.tdb    || 0) * 10 + (n.j2 === "B" ? 50 : 0),
-      bossPriority:     n.bossPriority ?? 50,
-      // Survivability
-      skillFlatHealth:  ((n.h_flat  || 0) + (n.h_flat2 || 0)) * 70,
-      skillPctHealth:   (n.h_pct   || 0) * 10,
-      skillPctDmgRes:   (n.dmgres  || 0) * 10,
-      skillArmorValue:  ((n.armor1  || 0) + (n.armor2  || 0)) * 50,
-      skillBlockRate:   (n.br      || 0) * 3,
-      skillBlockDR:     ((n.bdr1   || 0) + (n.bdr2    || 0)) * 15,
-      skillDodgeRate:   (n.dodge   || 0) * 1,
-      // Phase 2: Rune Awakening dynamic values (linear, no DR)
-      skillHSS:         (n.rune_hss             || 0) * 10,
-      skillHVF:         (n.rune_hvf             || 0) * 50,
-      skillLDE:         (n.rune_lightning_domain || 0) * 1.5,
-      skillAttackSpeed: j1AtkBonus + (n.rune_enchanted_flurry || 0) * 20,
-      // TOB: arcane fixed constant + two skill node pools (power-law DR, not gear DR)
-      skillTOB_arcane:  ARCANE_TOB_DISPLAYED,
-      skillTOB_nodes:   drTOB_skills((n.tob  || 0) * 15)
-                      + drTOB_skills((n.tob2 || 0) * 15),
-      _nodes: n,
-    };
-  } catch { return getSkillsFromDefaults(); }
-}
-
-function getSkillsFromDefaults() {
-  const n = { ...DEFAULT_SKILLS };
-  const pdMult = n.j3 === "B" ? 2.0 : 1.0;
-  const cdMult = n.j3 === "A" ? 1.5 : 1.0;
+// Derives formula-facing skill values from a raw nodes object.
+// Exported so App.jsx can call it directly with any profile's nodes.
+export function deriveSkills(n) {
+  const j3 = n.j3;
+  const pdMult = j3 === "B" ? 2.0 : 1.0;
+  const cdMult = j3 === "A" ? 1.5 : 1.0;
   const j1AtkBonus = n.j1 === "A" ? 40 : 0;
   return {
-    cr: n.cr * 3, cd: n.cd * 30, pr: n.pr * 1, pd: n.pd * 175, pdMult, cdMult,
-    tdbSkill: n.tdb * 10 + (n.j2 === "B" ? 50 : 0), bossPriority: n.bossPriority ?? 50,
-    skillFlatHealth: (n.h_flat + n.h_flat2) * 70,
-    skillPctHealth: n.h_pct * 10, skillPctDmgRes: n.dmgres * 10,
-    skillArmorValue: (n.armor1 + n.armor2) * 50, skillBlockRate: n.br * 3,
-    skillBlockDR: (n.bdr1 + n.bdr2) * 15, skillDodgeRate: n.dodge * 1,
-    skillHSS: n.rune_hss * 10,
-    skillHVF: n.rune_hvf * 50,
-    skillLDE: n.rune_lightning_domain * 1.5,
-    skillAttackSpeed: j1AtkBonus + n.rune_enchanted_flurry * 20,
-    skillTOB_arcane: ARCANE_TOB_DISPLAYED,
-    skillTOB_nodes: drTOB_skills(n.tob * 15) + drTOB_skills(n.tob2 * 15),
+    cr:               (n.cr     || 0) * 3,
+    cd:               (n.cd     || 0) * 30,
+    pr:               (n.pr     || 0) * 1,
+    pd:               (n.pd     || 0) * 175,
+    pdMult,
+    cdMult,
+    tdbSkill:         (n.tdb    || 0) * 10 + (n.j2 === "B" ? 50 : 0),
+    bossPriority:     n.bossPriority ?? 50,
+    skillFlatHealth:  ((n.h_flat  || 0) + (n.h_flat2 || 0)) * 70,
+    skillPctHealth:   (n.h_pct   || 0) * 10,
+    skillPctDmgRes:   (n.dmgres  || 0) * 10,
+    skillArmorValue:  ((n.armor1  || 0) + (n.armor2  || 0)) * 50,
+    skillBlockRate:   (n.br      || 0) * 3,
+    skillBlockDR:     ((n.bdr1   || 0) + (n.bdr2    || 0)) * 15,
+    skillDodgeRate:   (n.dodge   || 0) * 1,
+    skillHSS:         (n.rune_hss             || 0) * 10,
+    skillHVF:         (n.rune_hvf             || 0) * 50,
+    skillLDE:         (n.rune_lightning_domain || 0) * 1.5,
+    skillAttackSpeed: j1AtkBonus + (n.rune_enchanted_flurry || 0) * 20,
+    skillTOB_arcane:  ARCANE_TOB_DISPLAYED,
+    skillTOB_nodes:   drTOB_skills((n.tob  || 0) * 15)
+                    + drTOB_skills((n.tob2 || 0) * 15),
     _nodes: n,
   };
+}
+
+export function getSkills() {
+  try {
+    const raw = JSON.parse(localStorage.getItem("bh:skills") || "{}");
+    const isOldFormat = "skillFlatHealth" in raw || "tdbSkill" in raw;
+    const n = isOldFormat ? { ...DEFAULT_SKILLS } : { ...DEFAULT_SKILLS, ...raw };
+    return deriveSkills(n);
+  } catch { return deriveSkills({ ...DEFAULT_SKILLS }); }
 }
 
 // ── Total Output Boost — Per-Item Diminishing Returns ────────────────────────
@@ -314,11 +287,11 @@ function getMask(item) {
   return m;
 }
 
-export function optimize(weapons, accessories, exclusives, forcedItems = {}) {
+export function optimize(weapons, accessories, exclusives, reqs, forcedItems = {}, skills = null) {
   if (!weapons.length || !accessories.length || !exclusives.length) return null;
 
-  const reqs = getReqs();
-  const skills = getSkills();
+  if (!reqs) reqs = getReqs();
+  const s = skills || getSkills();
   const TARGET = (1 << MANDATORY_ENH.length) - 1;
 
   // If a slot is forced, only evaluate that item for that slot
@@ -340,8 +313,8 @@ export function optimize(weapons, accessories, exclusives, forcedItems = {}) {
     for (const a of as) {
       for (const e of es) {
         const mask        = w._mask | a._mask | e._mask;
-        const comboResult = scoreCombo(w, a, e, skills);
-        const reqResult   = checkReqs(w, a, e, reqs, skills);
+        const comboResult = scoreCombo(w, a, e, s);
+        const reqResult   = checkReqs(w, a, e, reqs, s);
         const fullCov     = mask === TARGET;
 
         if (fullCov && reqResult.pass) {
