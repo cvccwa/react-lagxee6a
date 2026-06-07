@@ -34,8 +34,8 @@ export function getSkills() {
       pr:               (n.pr     || 0) * 1,
       pd:               (n.pd     || 0) * 175,
       pdMult,
-      // j2 "A" = Primary DMG +50%, folds into tdbSkill (same additive bracket)
-      tdbSkill:         (n.tdb    || 0) * 10 + (n.j2 === "A" ? 50 : 0),
+      // j2 "B" = Secondary/Ability DMG +50%, folds into tdbSkill (same additive bracket)
+      tdbSkill:         (n.tdb    || 0) * 10 + (n.j2 === "B" ? 50 : 0),
       bossPriority:     n.bossPriority ?? 50,
       // Survivability
       skillFlatHealth:  ((n.h_flat  || 0) + (n.h_flat2 || 0)) * 70,
@@ -65,7 +65,7 @@ function getSkillsFromDefaults() {
   const j1AtkBonus = n.j1 === "A" ? 40 : 0;
   return {
     cr: n.cr * 3, cd: n.cd * 30, pr: n.pr * 1, pd: n.pd * 175, pdMult,
-    tdbSkill: n.tdb * 10 + (n.j2 === "A" ? 50 : 0), bossPriority: n.bossPriority ?? 50,
+    tdbSkill: n.tdb * 10 + (n.j2 === "B" ? 50 : 0), bossPriority: n.bossPriority ?? 50,
     skillFlatHealth: (n.h_flat + n.h_flat2) * 70,
     skillPctHealth: n.h_pct * 10, skillPctDmgRes: n.dmgres * 10,
     skillArmorValue: (n.armor1 + n.armor2) * 50, skillBlockRate: n.br * 3,
