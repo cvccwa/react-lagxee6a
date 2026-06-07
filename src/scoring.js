@@ -24,13 +24,49 @@ const SKILL_HVF          = 150;   // % HVF from 3/3 High-Voltage Field trait
 const SKILL_LDE          = 4.5;   // m LDE from 3/3 Lightning Domain trait
 const SKILL_TOB          = 278;   // % Total Output Boost: 117% base + 161% skills (no DR — skills exempt)
 
-// Read skill config from localStorage each call so Settings changes take effect without refresh
+// Read skill config from localStorage and derive formula-facing values from per-node ranks.
+// Returns the same keys as before so scoreCombo/checkReqs/getSurvivabilityStats need no changes.
 export function getSkills() {
   try {
     const saved = localStorage.getItem("bh:skills");
-    const result = saved ? { ...DEFAULT_SKILLS, ...JSON.parse(saved) } : { ...DEFAULT_SKILLS };
-    return result;
-  } catch { return { ...DEFAULT_SKILLS }; }
+    const raw = saved ? JSON.parse(saved) : {};
+    // Old format detection — fall back to defaults so formula isn't broken
+    const isOldFormat = "skillFlatHealth" in raw || "tdbSkill" in raw;
+    const n = isOldFormat ? { ...DEFAULT_SKILLS } : { ...DEFAULT_SKILLS, ...raw };
+
+    const pdMult = n.j3 === "A" ? 1.5 : 2;
+
+    return {
+      cr:               (n.cr     || 0) * 3,
+      cd:               (n.cd     || 0) * 30,
+      pr:               (n.pr     || 0) * 1,
+      pd:               (n.pd     || 0) * 175,
+      pdMult,
+      tdbSkill:         (n.tdb    || 0) * 10,
+      bossPriority:     n.bossPriority ?? 50,
+      skillFlatHealth:  ((n.h_flat  || 0) + (n.h_flat2 || 0)) * 70,
+      skillPctHealth:   (n.h_pct   || 0) * 10,
+      skillPctDmgRes:   (n.dmgres  || 0) * 10,
+      skillArmorValue:  ((n.armor1  || 0) + (n.armor2  || 0)) * 50,
+      skillBlockRate:   (n.br      || 0) * 3,
+      skillBlockDR:     ((n.bdr1   || 0) + (n.bdr2    || 0)) * 15,
+      skillDodgeRate:   (n.dodge   || 0) * 1,
+      _nodes: n,
+    };
+  } catch { return getSkillsFromDefaults(); }
+}
+
+function getSkillsFromDefaults() {
+  const n = { ...DEFAULT_SKILLS };
+  return {
+    cr: n.cr * 3, cd: n.cd * 30, pr: n.pr * 1, pd: n.pd * 175, pdMult: 2,
+    tdbSkill: n.tdb * 10, bossPriority: 50,
+    skillFlatHealth: (n.h_flat + n.h_flat2) * 70,
+    skillPctHealth: n.h_pct * 10, skillPctDmgRes: n.dmgres * 10,
+    skillArmorValue: (n.armor1 + n.armor2) * 50, skillBlockRate: n.br * 3,
+    skillBlockDR: (n.bdr1 + n.bdr2) * 15, skillDodgeRate: n.dodge * 1,
+    _nodes: n,
+  };
 }
 
 // ── Total Output Boost — Per-Item Diminishing Returns ────────────────────────

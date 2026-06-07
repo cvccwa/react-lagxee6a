@@ -85,24 +85,45 @@ export const DEFAULT_REQS = {
   deletionThreshold: 95,
 };
 
-// Default skill tree contributions (all configurable in Settings)
+// Default skill tree — per-node format (v1.5.0+)
+// bossPriority is a build preference slider, not a skill node
 export const DEFAULT_SKILLS = {
-  // Damage skills
-  cr: 3,       // Critical Hit Rate from skills (%)
-  cd: 30,      // Critical Damage from skills (%)
-  pr: 5,       // Precision Rate from skills (%)
-  pd: 875,     // Precision Damage additive from skills (%, pre-multiplier)
-  pdMult: 2,   // Row 21 junction: 2 = PD×200%, 1.5 = CD×150%
-  bossPriority: 50, // 0 = mob clearing, 100 = boss fight
-  tdbSkill: 50,     // Total Damage Bonus from skill tree (Row 5, maxed)
-  // Survivability skills — William's Profile 1 defaults
-  skillFlatHealth: 140,  // Flat Health from skills (Row 2 + Row 8)
-  skillPctHealth:  10,   // Percentage Max Health from skills (%)
-  skillPctDmgRes:  40,   // Percentage Damage Resistance from skills (%)
-  skillArmorValue: 100,  // Flat Armor Value from skills
-  skillBlockRate:  0,    // Block Rate from skills (%)
-  skillBlockDR:    0,    // Block Damage Reduction from skills (flat)
-  skillDodgeRate:  0,    // Dodge Rate from skills (%)
+  bossPriority: 50,
+
+  // Stat Skills — William's Profile 1 defaults
+  tdb:     5,  // 5×10% = 50% TDB
+  h_flat:  2,  // 2×70  = 140 flat health
+  tob:     5,  // 5×15% = 75% TOB
+  armor1:  1,  // 1×50  = 50 armor
+  cd:      1,  // 1×30% = 30% CD
+  br:      0,
+  j1:     "A", // ATK Speed +40%
+  h_flat2: 0,
+  cr:      1,  // 1×3%  = 3% CR
+  bdr1:    0,
+  tob2:    0,
+  h_pct:   1,  // 1×10% = 10% % Max Health
+  j2:     "A", // Primary DMG +50%
+  dodge:   0,
+  pr:      5,  // 5×1%  = 5% PR
+  armor2:  1,  // 1×50  = 50 armor
+  pd:      5,  // 5×175%=875% PD
+  dmgres:  4,  // 4×10% = 40% Dmg Resistance
+  ult:     0,
+  bdr2:    0,
+  j3:     "B", // Prec DMG ×200%
+
+  // Rune Awakening — all combat nodes maxed
+  rune_enchanted_flurry: 3,
+  rune_immortal_rune:    3,
+  rune_rolling_thunder:  3,
+  rune_endless_current:  1,
+  rune_lightning_domain: 3,
+  rune_hvf:              3,
+  rune_thunder_rune:     1,
+  rune_hss:              3,
+  rune_ultimate_storm:   3,
+  rune_cloud_piercing:   1,
 };
 
 export const ENRAGE_TIMER = 180; // seconds — boss enrage window
