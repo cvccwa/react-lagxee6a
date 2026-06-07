@@ -1084,7 +1084,7 @@ function OptimizeTab({results, activeResultProfile, setActiveResultProfile, runO
   const [showBuildInfo, setShowBuildInfo] = useState(false);
   const [showCurve, setShowCurve] = useState(false);
   const [showDPSCurve, setShowDPSCurve] = useState(false);
-  const [activeTab, setActiveTab] = useState("p1");
+  const [activeTab, setActiveTab] = useState("current");
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveName, setSaveName] = useState("");
   const hasAll = counts.Weapon > 0 && counts.Accessory > 0 && counts.Exclusive > 0;
@@ -1147,18 +1147,20 @@ function OptimizeTab({results, activeResultProfile, setActiveResultProfile, runO
         <div style={{background:C.surface, border:`1px solid #2a1a3a`, borderRadius:12, overflow:"hidden"}}>
           <div onClick={() => setShowBuildInfo(s => !s)} style={{width:"100%", padding:"14px 16px", display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer"}}>
             <span style={{color:C.gold, fontSize:14, fontWeight:700, letterSpacing:1}}>ℹ BUILD INFO</span>
-            <div style={{display:"flex", gap:6, alignItems:"center"}} onClick={ev => ev.stopPropagation()}>
-              {[0,1].map(idx => (
-                <button key={idx} onClick={() => setActiveResultProfile(idx)}
-                  style={{padding:"4px 10px", borderRadius:6,
-                    background: activeResultProfile===idx ? "#130f00" : "transparent",
-                    border:`1.5px solid ${activeResultProfile===idx ? C.gold : C.border}`,
-                    color: activeResultProfile===idx ? C.gold : C.textDim,
-                    fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"'Courier New',monospace",
-                    opacity: results[idx] ? 1 : 0.4}}>
-                  P{idx+1}
-                </button>
-              ))}
+            <div style={{display:"flex", gap:6, alignItems:"center"}}>
+              <div style={{display:"flex", gap:6}} onClick={ev => ev.stopPropagation()}>
+                {[0,1].map(idx => (
+                  <button key={idx} onClick={() => setActiveResultProfile(idx)}
+                    style={{padding:"4px 10px", borderRadius:6,
+                      background: activeResultProfile===idx ? "#130f00" : "transparent",
+                      border:`1.5px solid ${activeResultProfile===idx ? C.gold : C.border}`,
+                      color: activeResultProfile===idx ? C.gold : C.textDim,
+                      fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"'Courier New',monospace",
+                      opacity: results[idx] ? 1 : 0.4}}>
+                    P{idx+1}
+                  </button>
+                ))}
+              </div>
               <span style={{color:C.textDim, fontSize:16, marginLeft:4}}>{showBuildInfo ? "▲" : "▼"}</span>
             </div>
           </div>
@@ -1169,7 +1171,7 @@ function OptimizeTab({results, activeResultProfile, setActiveResultProfile, runO
               {!isCurrent && savedCombo && (
                 <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", paddingBottom:12, borderBottom:`1px solid ${C.border}`, marginBottom:4}}>
                   <span style={{color:C.textDim, fontSize:13}}>Saved {savedCombo.savedAt}</span>
-                  <button onClick={() => { deleteCombo(savedCombo.name); setActiveTab("p1"); }} style={{background:"transparent", border:`1px solid #3a1010`, color:"#884444", borderRadius:6, padding:"6px 12px", cursor:"pointer", fontSize:12, fontFamily:"'Courier New',monospace"}}>✕ Delete</button>
+                  <button onClick={() => { deleteCombo(savedCombo.name); setActiveTab("current"); }} style={{background:"transparent", border:`1px solid #3a1010`, color:"#884444", borderRadius:6, padding:"6px 12px", cursor:"pointer", fontSize:12, fontFamily:"'Courier New',monospace"}}>✕ Delete</button>
                 </div>
               )}
 
@@ -1521,17 +1523,14 @@ function OptimizeTab({results, activeResultProfile, setActiveResultProfile, runO
         {/* Tab strip — scrollable */}
         {(results.some(Boolean) || savedCombos.length > 0) && (
           <div className="tab-strip" style={{display:"flex", overflowX:"auto", border:`1px solid ${C.border}`, borderRadius:10, scrollbarWidth:"none", msOverflowStyle:"none"}}>
-            {["p1","p2"].map((id, idx) => (
-              <button key={id} onClick={() => { setActiveTab(id); setActiveResultProfile(idx); }}
-                style={{flexShrink:0, minWidth:"25%", padding:"11px 8px",
-                  background:activeTab===id?C.surface:"transparent", border:"none",
-                  borderBottom:`2px solid ${activeTab===id?C.gold:"transparent"}`,
-                  borderLeft: idx===1 ? `1px solid ${C.border}` : "none",
-                  color:activeTab===id?C.gold:C.textDim, fontFamily:"'Courier New',monospace",
-                  fontSize:12, cursor:"pointer", opacity:results[idx]?1:0.5}}>
-                Profile {idx+1}
-              </button>
-            ))}
+            <button onClick={() => setActiveTab("current")}
+              style={{flexShrink:0, minWidth:"25%", padding:"11px 8px",
+                background:activeTab==="current"?C.surface:"transparent", border:"none",
+                borderBottom:`2px solid ${activeTab==="current"?C.gold:"transparent"}`,
+                color:activeTab==="current"?C.gold:C.textDim, fontFamily:"'Courier New',monospace",
+                fontSize:12, cursor:"pointer"}}>
+              Current
+            </button>
             {savedCombos.map(c => (
               <button key={c.name} onClick={() => setActiveTab(c.name)} style={{flexShrink:0, minWidth:"25%", padding:"11px 8px", background:activeTab===c.name?C.surface:"transparent", border:"none", borderBottom:`2px solid ${activeTab===c.name?C.gold:"transparent"}`, borderLeft:`1px solid ${C.border}`, color:activeTab===c.name?C.gold:C.textDim, fontFamily:"'Courier New',monospace", fontSize:12, cursor:"pointer", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
                 {c.name}
@@ -1555,15 +1554,14 @@ function OptimizeTab({results, activeResultProfile, setActiveResultProfile, runO
               {hasAll ? "Tap the button above to find your optimal build" : "Add gear to all 3 slots, then optimize"}
             </p>
           </div>
-        ) : (activeTab === "p1" || activeTab === "p2") ? (() => {
-          const profileIdx = activeTab === "p2" ? 1 : 0;
-          const profileResult = results[profileIdx];
-          const profileSkills = getSkillsForProfile(profileIdx);
+        ) : activeTab === "current" ? (() => {
+          const profileResult = results[activeResultProfile];
+          const profileSkills = getSkillsForProfile(activeResultProfile);
           return profileResult
             ? renderComboPanel(profileResult.weapon, profileResult.accessory, profileResult.exclusive, profileResult.reqResult, true, null, null, profileSkills)
             : (
               <div style={{textAlign:"center", padding:"40px 20px", color:C.textDim}}>
-                <p style={{fontSize:15}}>Profile {profileIdx+1} result not available — run the optimizer.</p>
+                <p style={{fontSize:15}}>Run the optimizer to see results.</p>
               </div>
             );
         })() : (
