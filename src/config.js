@@ -101,7 +101,7 @@ export const DEFAULT_SKILLS = {
   h_flat2: 0,
   cr:      1,  // 1×3%  = 3% CR
   bdr1:    0,
-  tob2:    0,
+  tob2:    5,  // both Output Amplification nodes maxed
   h_pct:   1,  // 1×10% = 10% % Max Health
   j2:     "A", // Primary DMG +50%
   dodge:   0,
@@ -125,6 +125,9 @@ export const DEFAULT_SKILLS = {
   rune_ultimate_storm:   3,
   rune_cloud_piercing:   1,
 };
+
+// Measured: arcane 5/5 (+125 raw) → 117 displayed TOB; used as fixed additive in drTOB formula
+export const ARCANE_TOB_DISPLAYED = 117;
 
 export const ENRAGE_TIMER = 180; // seconds — boss enrage window
 
