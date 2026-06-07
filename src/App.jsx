@@ -1631,8 +1631,6 @@ function countPoints(nodes) {
 // ── Skill Tree Panel ───────────────────────────────────────────────────────────
 
 function SkillTreePanel({ nodes, onChange, migrationNotice, onDismissMigration }) {
-  const [showDerived, setShowDerived] = useState(false);
-
   const totalPts = countPoints(nodes);
   const atCap = totalPts >= MAX_SKILL_POINTS;
 
@@ -1657,9 +1655,6 @@ function SkillTreePanel({ nodes, onChange, migrationNotice, onDismissMigration }
     onChange(sk.id, next);
   };
 
-  const n = nodes;
-  const pdMult = n.j3 === "A" ? 1.5 : 2;
-
   const GOLD_IDS = new Set(["tdb","cr","cd","pr","pd"]);
   const pipColor = (id) => GOLD_IDS.has(id) ? C.gold : C.purpleLight;
 
@@ -1676,7 +1671,7 @@ function SkillTreePanel({ nodes, onChange, migrationNotice, onDismissMigration }
       )}
 
       {/* Progress bar */}
-      <div style={{marginBottom:12}}>
+      <div style={{marginBottom:14}}>
         <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
           <span style={{color:C.textDim,fontSize:11,letterSpacing:1}}>SKILL POINTS</span>
           <span style={{color:atCap?C.gold:C.textDim,fontSize:11,fontWeight:atCap?700:400}}>{totalPts} / {MAX_SKILL_POINTS}{atCap?" ● CAP":""}</span>
@@ -1687,33 +1682,30 @@ function SkillTreePanel({ nodes, onChange, migrationNotice, onDismissMigration }
       </div>
 
       {/* Two-column layout */}
-      <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+      <div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
 
         {/* Left: Stat Skills */}
-        <div style={{flex:1.5,minWidth:0}}>
-          <p style={{...lbl,fontSize:10,marginBottom:6}}>STAT SKILLS</p>
-          {STAT_SKILLS.map((sk, idx) => {
+        <div style={{flex:1.4,minWidth:0}}>
+          <p style={{...lbl,fontSize:10,marginBottom:8}}>STAT SKILLS</p>
+          {STAT_SKILLS.map((sk) => {
             if (sk.isJunction) {
               const cur = nodes[sk.id];
               return (
-                <div key={sk.id} style={{marginBottom:5}}>
-                  <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2}}>
-                    <span style={{color:C.border,fontSize:9,minWidth:14,textAlign:"right"}}>{idx+1}</span>
-                    <span style={{color:C.textDim,fontSize:9,letterSpacing:0.5,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sk.label}</span>
-                  </div>
-                  <div style={{display:"flex",gap:3,paddingLeft:18}}>
+                <div key={sk.id} style={{marginBottom:10}}>
+                  <span style={{display:"block",color:C.textDim,fontSize:11,marginBottom:5,letterSpacing:0.3}}>{sk.label}</span>
+                  <div style={{display:"flex",gap:4}}>
                     {[{k:"A",desc:sk.optA},{k:"B",desc:sk.optB}].map(({k,desc})=>{
                       const sel = cur === k;
                       const blocked = !sel && atCap && cur == null;
                       return (
                         <button key={k} onClick={()=>tapJunction(sk,k)}
-                          style={{flex:1,padding:"3px 2px",fontSize:9,
+                          style={{flex:1,padding:"7px 4px",fontSize:11,
                             background:sel?"#130f00":"transparent",
                             border:`1px solid ${sel?C.gold:blocked?"#1e1e3544":C.border}`,
                             color:sel?C.gold:blocked?C.textDim+"55":C.textDim,
-                            borderRadius:4,cursor:blocked?"default":"pointer",
+                            borderRadius:6,cursor:blocked?"default":"pointer",
                             fontFamily:"'Courier New',monospace",lineHeight:1.4,
-                            whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                            textAlign:"center"}}>
                           {desc}
                         </button>
                       );
@@ -1724,15 +1716,23 @@ function SkillTreePanel({ nodes, onChange, migrationNotice, onDismissMigration }
             }
             const cur = nodes[sk.id] || 0;
             const blocked = atCap && cur === 0;
+            const total = cur * sk.perRank;
             return (
               <div key={sk.id} onClick={()=>tapStat(sk)}
-                style={{display:"flex",alignItems:"center",gap:4,marginBottom:3,cursor:blocked?"default":"pointer",opacity:blocked?0.35:1}}>
-                <span style={{color:C.border,fontSize:9,minWidth:14,textAlign:"right"}}>{idx+1}</span>
-                <span style={{flex:1,color:cur>0?C.text:C.textDim,fontSize:10,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sk.label}</span>
-                <div style={{display:"flex",gap:2,flexShrink:0}}>
-                  {Array.from({length:sk.max}).map((_,i)=>(
-                    <div key={i} style={{width:7,height:7,borderRadius:1,background:i<cur?pipColor(sk.id):C.border}}/>
-                  ))}
+                style={{marginBottom:8,cursor:blocked?"default":"pointer",opacity:blocked?0.4:1}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
+                  <span style={{color:cur>0?C.text:C.textDim,fontSize:12,lineHeight:1.3,flex:1,marginRight:6}}>{sk.label}</span>
+                  <span style={{color:cur>0?pipColor(sk.id):C.textDim,fontSize:11,flexShrink:0,fontWeight:cur>0?700:400,fontFamily:"'Courier New',monospace"}}>{cur}/{sk.max}</span>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  <div style={{display:"flex",gap:3,flexShrink:0}}>
+                    {Array.from({length:sk.max}).map((_,i)=>(
+                      <div key={i} style={{width:11,height:11,borderRadius:2,background:i<cur?pipColor(sk.id):C.border}}/>
+                    ))}
+                  </div>
+                  <span style={{color:cur>0?pipColor(sk.id):C.textDim,fontSize:10,marginLeft:2}}>
+                    {cur>0 ? `+${total}${sk.unit}` : `+${sk.perRank}${sk.unit}/rank`}
+                  </span>
                 </div>
               </div>
             );
@@ -1741,94 +1741,29 @@ function SkillTreePanel({ nodes, onChange, migrationNotice, onDismissMigration }
 
         {/* Right: Rune Awakening */}
         <div style={{flex:1,minWidth:0}}>
-          <p style={{...lbl,fontSize:10,marginBottom:6}}>RUNE</p>
+          <p style={{...lbl,fontSize:10,marginBottom:8}}>RUNE</p>
           {RUNE_SKILLS.map(sk=>{
             const cur = nodes[sk.id] || 0;
             const blocked = atCap && cur === 0;
             return (
               <div key={sk.id} onClick={()=>tapRune(sk)}
-                style={{marginBottom:5,cursor:blocked?"default":"pointer",opacity:blocked?0.35:1}}>
-                <div style={{display:"flex",alignItems:"center",gap:4}}>
-                  <span style={{flex:1,color:cur>0?C.text:C.textDim,fontSize:10,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sk.label}</span>
-                  <div style={{display:"flex",gap:2,flexShrink:0}}>
-                    {Array.from({length:sk.max}).map((_,i)=>(
-                      <div key={i} style={{width:7,height:7,borderRadius:sk.max===1?"50%":1,background:i<cur?C.green:C.border}}/>
-                    ))}
-                  </div>
+                style={{marginBottom:10,cursor:blocked?"default":"pointer",opacity:blocked?0.4:1}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
+                  <span style={{color:cur>0?C.text:C.textDim,fontSize:12,lineHeight:1.3,flex:1,marginRight:4}}>{sk.label}</span>
+                  <span style={{color:cur>0?C.green:C.textDim,fontSize:11,flexShrink:0,fontWeight:cur>0?700:400,fontFamily:"'Courier New',monospace"}}>{cur}/{sk.max}</span>
                 </div>
-                {cur>0&&<p style={{margin:"1px 0 0",color:C.green,fontSize:9,lineHeight:1.3}}>{sk.rankDesc[cur-1]}</p>}
+                <div style={{display:"flex",gap:3,marginBottom:cur>0?3:0}}>
+                  {Array.from({length:sk.max}).map((_,i)=>(
+                    <div key={i} style={{width:sk.max===1?13:11,height:sk.max===1?13:11,borderRadius:sk.max===1?"50%":2,background:i<cur?C.green:C.border}}/>
+                  ))}
+                </div>
+                <span style={{color:cur>0?C.green:C.textDim,fontSize:10}}>
+                  {cur>0 ? sk.rankDesc[cur-1] : sk.rankDesc[sk.max-1]}
+                </span>
               </div>
             );
           })}
         </div>
-      </div>
-
-      {/* Derived Values collapsible */}
-      <div style={{marginTop:14,borderTop:`1px solid ${C.border}`,paddingTop:12}}>
-        <button onClick={()=>setShowDerived(d=>!d)}
-          style={{width:"100%",background:"transparent",border:"none",color:C.textDim,fontSize:11,cursor:"pointer",textAlign:"left",padding:0,letterSpacing:1,fontFamily:"'Courier New',monospace"}}>
-          {showDerived?"▼":"▶"} DERIVED VALUES
-        </button>
-        {showDerived&&(
-          <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:12}}>
-
-            {/* Core Stats */}
-            <div>
-              <p style={{...lbl,fontSize:10,marginBottom:6}}>CORE STATS</p>
-              {[
-                ["Critical Hit Rate",   `+${(n.cr||0)*3}%`],
-                ["Critical Damage",     `+${(n.cd||0)*30}%`],
-                ["Precision Rate",      `+${(n.pr||0)*1}%`],
-                ["Precision Damage",    `+${(n.pd||0)*175}%`],
-                ["Total Damage Bonus",  `+${(n.tdb||0)*10}%`],
-                ["Flat Health",         `+${((n.h_flat||0)+(n.h_flat2||0))*70}`],
-                ["% Max Health",        `+${(n.h_pct||0)*10}%`],
-                ["Armor Value",         `+${((n.armor1||0)+(n.armor2||0))*50}`],
-                ["Block Rate",          `+${(n.br||0)*3}%`],
-                ["Block Mitigation",    `+${((n.bdr1||0)+(n.bdr2||0))*15}`],
-                ["Dodge Rate",          `+${(n.dodge||0)*1}%`],
-                ["Damage Resistance",   `+${(n.dmgres||0)*10}%`],
-              ].map(([label,val])=>(
-                <div key={label} style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                  <span style={{color:C.textDim,fontSize:11}}>{label}</span>
-                  <span style={{color:C.text,fontSize:11}}>{val}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Choices */}
-            <div>
-              <p style={{...lbl,fontSize:10,marginBottom:6}}>JUNCTIONS</p>
-              {[
-                ["Row 7  ATK/CDR",  n.j1==="A"?"ATK Spd +40%":n.j1==="B"?"Abil CDR −40%":"— unassigned"],
-                ["Row 13 DMG Type", n.j2==="A"?"Primary +50%":n.j2==="B"?"Secondary +50%":"— unassigned"],
-                ["Row 21 Spec",     pdMult===2?"Prec DMG ×200%":"Crit DMG ×150%"],
-              ].map(([label,val])=>(
-                <div key={label} style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                  <span style={{color:C.textDim,fontSize:11}}>{label}</span>
-                  <span style={{color:C.gold,fontSize:11}}>{val}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Rune Awakening */}
-            <div>
-              <p style={{...lbl,fontSize:10,marginBottom:6}}>RUNE AWAKENING</p>
-              {RUNE_SKILLS.map(sk=>{
-                const cur = nodes[sk.id]||0;
-                return (
-                  <div key={sk.id} style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                    <span style={{color:C.textDim,fontSize:11}}>{sk.label}</span>
-                    <span style={{color:cur>0?C.green:C.textDim,fontSize:11}}>{cur>0?sk.rankDesc[cur-1]:"—"}</span>
-                  </div>
-                );
-              })}
-              <p style={{color:C.textDim,fontSize:10,margin:"8px 0 0",lineHeight:1.5}}>
-                Rune Awakening nodes shown for reference. Formula constants (HVF, HSS, LDE) remain hardcoded this release.
-              </p>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
