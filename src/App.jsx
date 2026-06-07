@@ -1576,7 +1576,7 @@ function OptimizeTab({result, runOptimize, counts, savedCombos, saveCombo, delet
 
 // ── Skill Tree constants ───────────────────────────────────────────────────────
 
-const MAX_SKILL_POINTS = 60;
+const MAX_SKILL_POINTS = 62;
 
 const STAT_SKILLS = [
   { id:"tdb",    label:"Total Damage Bonus",      max:5, perRank:10,  unit:"%" },
