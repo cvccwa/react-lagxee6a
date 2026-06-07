@@ -1637,6 +1637,21 @@ function SkillTreePanel({ nodes, onChange, migrationNotice, onDismissMigration }
   const atCap = totalPts >= MAX_SKILL_POINTS;
   const n = nodes;
 
+  // Long-press → reset to 0
+  const lpTimer = useRef(null);
+  const lpFired = useRef(false);
+  const startLP = (id) => {
+    lpFired.current = false;
+    lpTimer.current = setTimeout(() => { lpFired.current = true; onChange(id, 0); }, 500);
+  };
+  const cancelLP = () => clearTimeout(lpTimer.current);
+  const lpProps = (id) => ({
+    onPointerDown: () => startLP(id),
+    onPointerUp: cancelLP,
+    onPointerLeave: cancelLP,
+    onContextMenu: (e) => e.preventDefault(),
+  });
+
   // At cap with points → decrement; at max → reset; can add → increment
   const tapStat = (sk) => {
     const cur = nodes[sk.id] || 0;
@@ -1741,7 +1756,7 @@ function SkillTreePanel({ nodes, onChange, migrationNotice, onDismissMigration }
             const hasPoints = cur>0;
             const blocked = atCap&&cur===0;
             return (
-              <button key={sk.id} onClick={()=>tapStat(sk)}
+              <button key={sk.id} onClick={()=>{ if(!lpFired.current) tapStat(sk); }} {...lpProps(sk.id)}
                 style={{width:"100%",textAlign:"left",cursor:"pointer",
                   background:hasPoints?"#1a0f35":C.surface,
                   border:`1px solid ${hasPoints?C.purpleLight:C.border}`,
@@ -1769,7 +1784,7 @@ function SkillTreePanel({ nodes, onChange, migrationNotice, onDismissMigration }
             const isToggle=sk.max===1;
             const blocked=atCap&&cur===0;
             return (
-              <button key={sk.id} onClick={()=>tapRune(sk)}
+              <button key={sk.id} onClick={()=>{ if(!lpFired.current) tapRune(sk); }} {...lpProps(sk.id)}
                 style={{width:"100%",textAlign:"left",cursor:"pointer",
                   background:hasPoints?"#1a0f35":C.surface,
                   border:`1px solid ${hasPoints?C.gold:C.border}`,
