@@ -1710,7 +1710,7 @@ function SkillTreePanel({ nodes, onChange, migrationNotice, onDismissMigration }
         </div>
         {atCap&&(
           <p style={{color:C.green,fontSize:10,margin:"5px 0 0",textAlign:"center",fontFamily:"'Courier New',monospace"}}>
-            All 60 points assigned · Tap filled nodes to remove
+            All {MAX_SKILL_POINTS} points assigned · Tap filled nodes to remove
           </p>
         )}
       </div>
