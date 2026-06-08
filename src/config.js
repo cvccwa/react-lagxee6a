@@ -62,6 +62,15 @@ export const ENH_W = {
 // Pair interaction base floor (0.4 = 40% value with no partner, scales to 100% at max partner)
 export const PAIR_BASE = 0.4;
 
+// HVF zap damage coefficient — exact value from empirical measurement
+// Field deals half of scaled projectile damage per zap.
+// At zero HVF with Endless Current: Awakening(60) × 0.5 = 30 = regular MB damage (clean).
+// Community had 49/90 ≈ 0.5444 due to ~9% proc undercount.
+export const HVF_COEFFICIENT = 0.5;
+
+// LDE base field radius — confirmed in-game at zero LDE bonuses
+export const LDE_BASE = 3; // m
+
 // Fixed base effects on armor/amulet — not in extendedEffects
 export const BASE_BLOCK_RATE_AMULET  = 18.5; // Alchemy Amulet fixed base block rate
 export const THOR_BASE_HEALTH        = 1450;  // 700 Thor base + 750 Scroll of Immortality maxed

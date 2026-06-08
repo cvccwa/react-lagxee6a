@@ -5,13 +5,12 @@
 // To update skill tree profile: edit the SKILL_* constants below.
 // To update base game values: edit the BASE_* constants below.
 
-import { STAT_W, ENH_W, GRADE_M, MANDATORY_ENH, DEFAULT_REQS, DEFAULT_SKILLS, ARCANE_TOB_DISPLAYED } from "./config.js";
+import { STAT_W, ENH_W, GRADE_M, MANDATORY_ENH, DEFAULT_REQS, DEFAULT_SKILLS, ARCANE_TOB_DISPLAYED, HVF_COEFFICIENT, LDE_BASE } from "./config.js";
 
 // ── Base Game Constants ───────────────────────────────────────────────────────
 // Measured with zero gear AND zero skill points assigned.
 
 const BASE_MB_PROJ_DAMAGE = 20869; // 70 base + 20000 Gaea Sigil base effect + 799 God Tempest base effect
-const HVF_COEFFICIENT     = 49 / 90; // Fixed scaling coefficient for HVF→zap conversion, confirmed by community spreadsheet
 const BASE_CR_AMULET      = 16.2;  // Alchemy Amulet base effect — fixed on all Amulets, not in extendedEffects
 
 // Derives formula-facing skill values from a raw nodes object.
@@ -130,35 +129,21 @@ export function scoreItem(item) {
 //
 // Full mechanically-grounded DPS formula:
 //
-//   proj_damage    = 130 × (1 + RTE_gear/100)
-//                    ↑ Rolling Thunder gear boosts Mjolnir Bash projectile damage
+//   proj_freq   = 2 × (1 + (skillAttackSpeed + ROE_gear)/100)
+//                 ↑ base = 2 proj/sec confirmed in-game; ATK speed scales from there
 //
-//   zap_damage     = 32 × (1 + (150 + HVF_gear)/100)
-//                    ↑ HVF scales zap damage off Mjolnir Bash projectile damage
+//   zap_damage  = proj_damage × (1 + (skillHVF + HVF_gear)/100) × 0.5
+//                 ↑ +1 = Endless Current activating bonus damage system
+//                 ↑ 0.5 = field deals half of scaled proj damage per zap (exact)
 //
-//   attack_speed   = 2 × (1 + (100 + ROE_gear)/100)
-//                    ↑ ROE gear + skills boost Mjolnir Bash attack speed
+//   zap_freq    = proj_freq × (0.5 + (skillHSS + HSS_gear)/100)
+//                 ↑ 0.5 = base field rate (half MB rate regardless of HSS)
+//                 ↑ HSS adds to base additively (confirmed: "inherits 473% of MB attack speed")
 //
-//   zap_freq       = attack_speed × (30 + HSS_gear)/100
-//                    ↑ HSS inherits from attack speed to set zap trigger frequency
+//   area        = (LDE_BASE + skillLDE + LDE_gear)^1.5
+//                 ↑ LDE_BASE = 3m confirmed in-game at zero bonuses
 //
-//   PR_total       = (6 + PR_gear) / 100
-//   PD_total       = (3350 + PD_gear × 2) / 100
-//                    ↑ PD_gear × 2 because gear adds before the ×200% skill multiplier
-//
-//   precision      = 1 + PR_total × (PD_total - 1)
-//                    ↑ precision hits replace normal hits; expected value formula
-//
-//   displayed_tob  = 278 + drTOB(weapon_TOB) + drTOB(accessory_TOB) + drTOB(exclusive_TOB)
-//                    ↑ per-item DR fitted from 8 empirical data points
-//                    ↑ skills (278%) are DR-exempt and add linearly
-//   output         = displayed_tob / 100
-//                    ↑ displayed value IS the true multiplier (game doesn't compress again)
-//
-//   area           = (4.5 + LDE_gear)²
-//                    ↑ lightning field is a circle; enemies hit ∝ πr²
-//
-//   DPS = proj_damage × zap_damage × zap_freq × precision × output × area
+//   DPS = proj_damage × zap_damage × zap_freq × expected_hit × tdb_factor × output × area
 
 export function scoreCombo(w, a, e, skills = null) {
   const combo = [w, a, e];
@@ -199,13 +184,13 @@ export function scoreCombo(w, a, e, skills = null) {
 
   // Shared mechanics
   const proj_damage = BASE_MB_PROJ_DAMAGE;
-  const proj_freq   = 1 + (s.skillAttackSpeed + roe_gear) / 100;
-  const zap_damage  = proj_damage * (s.skillHVF + hvf_gear) / 100 * HVF_COEFFICIENT;
-  const zap_freq    = proj_freq * (s.skillHSS + hss_gear) / 100;
+  const proj_freq   = 2 * (1 + (s.skillAttackSpeed + roe_gear) / 100);
+  const zap_damage  = proj_damage * (1 + (s.skillHVF + hvf_gear) / 100) * HVF_COEFFICIENT;
+  const zap_freq    = proj_freq * (0.5 + (s.skillHSS + hss_gear) / 100);
   const boss_priority = s.bossPriority / 100;
   const tdb_factor  = 1 + (s.tdbSkill + tdb_gear + boss_priority * boss_gear) / 100;
   const output      = displayed_tob / 100;
-  const area        = Math.pow(s.skillLDE + lde_gear, 1.5);
+  const area        = Math.pow(LDE_BASE + s.skillLDE + lde_gear, 1.5);
 
   const field_DPS = zap_damage * zap_freq * expected_hit * tdb_factor * output * area;
   const single_zap = zap_damage * output * tdb_factor; // normal hit, no crit/precision
