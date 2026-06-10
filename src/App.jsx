@@ -1212,6 +1212,28 @@ function OptimizeTab({results, activeResultProfile, setActiveResultProfile, runO
                 </div>
               </div>
 
+              {/* Field Stats */}
+              <div>
+                <p style={{color:C.textDim, margin:"0 0 10px", fontSize:11, letterSpacing:1.5}}>FIELD STATS</p>
+                {(() => {
+                  const fs = scoreCombo(w, a, e, skills);
+                  return (
+                    <div style={{display:"flex", flexDirection:"column", gap:8}}>
+                      {[
+                        { label:"Procs / sec",          value: (Math.round(fs.procs_per_sec * 10) / 10).toString() },
+                        { label:"Crit DMG / Proc",      value: formatLargeNumber(Math.round(fs.crit_dmg_proc)) },
+                        { label:"Precision DMG / Proc", value: formatLargeNumber(Math.round(fs.prec_dmg_proc)) },
+                      ].map(s => (
+                        <div key={s.label} style={{display:"flex", justifyContent:"space-between", fontSize:14}}>
+                          <span style={{color:C.text}}>{s.label}</span>
+                          <span style={{color:C.gold}}>{s.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+
               {/* DPS Curve — collapsible, between Damage Stats and Survivability */}
               {(() => {
                 const primaryScore = scoreCombo(w, a, e, skills);

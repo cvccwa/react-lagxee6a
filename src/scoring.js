@@ -140,9 +140,9 @@ export function scoreItem(item) {
 //                 ↑ 0.5 = base field rate (half MB rate regardless of HSS)
 //                 ↑ HSS adds to base additively (confirmed: "inherits 473% of MB attack speed")
 //
-//   field_DPS  = zap_damage × zap_freq × expected_hit × tdb_factor × output × (skillLDE + LDE_gear)
-//                ↑ LDE = linear reach in metres (each metre = proportionally more enemies hit)
-//                ↑ no LDE_BASE — 3m base is melee range, excluded same as close-range bonus
+//   field_DPS  = zap_damage × zap_freq × expected_hit × tdb_factor × output
+//                ↑ LDE not in DPS formula — field hits each enemy once per zap regardless of radius
+//                ↑ LDE stays in checkReqs() as a reach threshold only
 
 export function scoreCombo(w, a, e, skills = null) {
   const combo = [w, a, e];
@@ -189,13 +189,20 @@ export function scoreCombo(w, a, e, skills = null) {
   const boss_priority = s.bossPriority / 100;
   const tdb_factor  = 1 + (s.tdbSkill + tdb_gear + boss_priority * boss_gear) / 100;
   const output      = displayed_tob / 100;
-  const field_DPS = zap_damage * zap_freq * expected_hit * tdb_factor * output * (s.skillLDE + lde_gear);
+  const field_DPS = zap_damage * zap_freq * expected_hit * tdb_factor * output;
   const single_zap = zap_damage * output * tdb_factor; // normal hit, no crit/precision
+
+  const procs_per_sec  = zap_freq;
+  const crit_dmg_proc  = zap_damage * cd_total * tdb_factor * output;
+  const prec_dmg_proc  = zap_damage * pd_total * tdb_factor * output;
 
   return {
     score: Math.round(field_DPS * 100) / 100,
     field_DPS,
     single_zap,
+    procs_per_sec,
+    crit_dmg_proc,
+    prec_dmg_proc,
   };
 }
 
