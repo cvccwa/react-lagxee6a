@@ -5,7 +5,7 @@
 // To update skill tree profile: edit the SKILL_* constants below.
 // To update base game values: edit the BASE_* constants below.
 
-import { STAT_W, ENH_W, GRADE_M, MANDATORY_ENH, DEFAULT_REQS, DEFAULT_SKILLS, ARCANE_TOB_DISPLAYED, HVF_COEFFICIENT, LDE_BASE } from "./config.js";
+import { STAT_W, ENH_W, GRADE_M, MANDATORY_ENH, DEFAULT_REQS, DEFAULT_SKILLS, ARCANE_TOB_DISPLAYED, HVF_COEFFICIENT } from "./config.js";
 
 // ── Base Game Constants ───────────────────────────────────────────────────────
 // Measured with zero gear AND zero skill points assigned.
@@ -140,10 +140,9 @@ export function scoreItem(item) {
 //                 ↑ 0.5 = base field rate (half MB rate regardless of HSS)
 //                 ↑ HSS adds to base additively (confirmed: "inherits 473% of MB attack speed")
 //
-//   area        = (LDE_BASE + skillLDE + LDE_gear)^1.5
-//                 ↑ LDE_BASE = 3m confirmed in-game at zero bonuses
-//
-//   DPS = proj_damage × zap_damage × zap_freq × expected_hit × tdb_factor × output × area
+//   field_DPS  = zap_damage × zap_freq × expected_hit × tdb_factor × output × (skillLDE + LDE_gear)
+//                ↑ LDE = linear reach in metres (each metre = proportionally more enemies hit)
+//                ↑ no LDE_BASE — 3m base is melee range, excluded same as close-range bonus
 
 export function scoreCombo(w, a, e, skills = null) {
   const combo = [w, a, e];
@@ -190,9 +189,7 @@ export function scoreCombo(w, a, e, skills = null) {
   const boss_priority = s.bossPriority / 100;
   const tdb_factor  = 1 + (s.tdbSkill + tdb_gear + boss_priority * boss_gear) / 100;
   const output      = displayed_tob / 100;
-  const area        = Math.pow(LDE_BASE + s.skillLDE + lde_gear, 1.5);
-
-  const field_DPS = zap_damage * zap_freq * expected_hit * tdb_factor * output * area;
+  const field_DPS = zap_damage * zap_freq * expected_hit * tdb_factor * output * (s.skillLDE + lde_gear);
   const single_zap = zap_damage * output * tdb_factor; // normal hit, no crit/precision
 
   return {

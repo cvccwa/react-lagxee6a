@@ -68,8 +68,9 @@ export const PAIR_BASE = 0.4;
 // Community had 49/90 ≈ 0.5444 due to ~9% proc undercount.
 export const HVF_COEFFICIENT = 0.5;
 
-// LDE base field radius — confirmed in-game at zero LDE bonuses
-export const LDE_BASE = 3; // m
+// LDE_BASE = 3m (doc only — melee range, not counted in DPS formula;
+// same reason close-range enemy bonus is excluded from optimizer)
+// const LDE_BASE = 3;
 
 // Fixed base effects on armor/amulet — not in extendedEffects
 export const BASE_BLOCK_RATE_AMULET  = 18.5; // Alchemy Amulet fixed base block rate
