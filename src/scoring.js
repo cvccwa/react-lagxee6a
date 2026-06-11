@@ -5,7 +5,7 @@
 // To update skill tree profile: edit the SKILL_* constants below.
 // To update base game values: edit the BASE_* constants below.
 
-import { STAT_W, ENH_W, GRADE_M, MANDATORY_ENH, DEFAULT_REQS, DEFAULT_SKILLS, ARCANE_TOB_DISPLAYED, HVF_COEFFICIENT } from "./config.js";
+import { STAT_W, ENH_W, GRADE_M, MANDATORY_ENH, DEFAULT_REQS, DEFAULT_SKILLS, ARCANE_TOB_DISPLAYED, HVF_COEFFICIENT, ABILITY_MULT } from "./config.js";
 
 // ── Base Game Constants ───────────────────────────────────────────────────────
 // Measured with zero gear AND zero skill points assigned.
@@ -189,7 +189,7 @@ export function scoreCombo(w, a, e, skills = null) {
   const boss_priority = s.bossPriority / 100;
   const tdb_factor  = 1 + (s.tdbSkill + tdb_gear + boss_priority * boss_gear) / 100;
   const output      = displayed_tob / 100;
-  const field_DPS = zap_damage * zap_freq * expected_hit * tdb_factor * output;
+  const field_DPS = zap_damage * zap_freq * expected_hit * tdb_factor * output * ABILITY_MULT;
   const single_zap = zap_damage * output * tdb_factor; // normal hit, no crit/precision
 
   const procs_per_sec  = zap_freq;

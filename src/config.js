@@ -139,6 +139,10 @@ export const DEFAULT_SKILLS = {
 // Measured: arcane 5/5 (+125 raw) → 117 displayed TOB; used as fixed additive in drTOB formula
 export const ARCANE_TOB_DISPLAYED = 117;
 
+// Thor's Rune Awakening field zaps = secondary/ability damage (confirmed in-game via j2 junction).
+// Ability Damage Multiplier (50%) is a separate multiplicative bucket, distinct from TDB and TOB.
+export const ABILITY_MULT = 1.5;
+
 export const ENRAGE_TIMER = 180; // seconds — boss enrage window
 
 export const COMBO_VERSION = 1; // increment if saved combo format changes
