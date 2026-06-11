@@ -22,6 +22,66 @@ import { supabase } from "./supabase.js";
 
 const APP_VERSION = "1.5.3";
 
+const CHANGELOG = [
+  {
+    version: "1.5.4",
+    date: "June 2026",
+    changes: [
+      "Formula: proj_freq base corrected to 2/sec (confirmed in-game)",
+      "Formula: HVF +1 baseline — Endless Current activates field damage system",
+      "Formula: HVF coefficient corrected to 0.5 (community 49/90 was ~9% off due to proc undercounting)",
+      "Formula: HSS additive structure — field inherits MB attack speed additively to 0.5 base",
+      "Formula: LDE removed from DPS score — field hits each enemy identically regardless of radius. LDE remains as range threshold only.",
+      "Build Info: Procs/sec, Crit DMG/Proc, Precision DMG/Proc now shown for all profiles and saved combos",
+    ],
+  },
+  {
+    version: "1.5.3",
+    date: "June 2026",
+    changes: [
+      "Optimize button now runs both profiles simultaneously",
+      "Build Info header switches between P1 and P2",
+      "Saved combo tabs show score under the active profile's skills",
+    ],
+  },
+  {
+    version: "1.5.2",
+    date: "June 2026",
+    changes: [
+      "Hit roll formula corrected — precision and crit are independent rolls; higher multiplier wins tiebreaker when both trigger",
+      "Fixed: j3=A junction was boosting Precision Damage instead of Critical Damage",
+    ],
+  },
+  {
+    version: "1.5.1",
+    date: "May 2026",
+    changes: [
+      "Phase 2 formula live — all Rune Awakening skill nodes now factor into DPS scoring",
+      "Junction nodes j2 and j3 resolved: j2=B confirmed to apply to field DPS, j3=B doubles Precision Damage",
+    ],
+  },
+  {
+    version: "1.5.0",
+    date: "May 2026",
+    changes: [
+      "Skill tree UI — per-node point allocation with tap-to-cycle controls",
+      "60-point cap enforced across all nodes",
+      "Profile 1 and Profile 2 skill configurations stored independently",
+    ],
+  },
+  {
+    version: "1.4.3",
+    date: "May 2026",
+    changes: [
+      "Camera scan for gear cards",
+      "Dual profile support added",
+      "Copy build prompt to clipboard",
+      "Undo delete for gear items",
+      "Onboarding flow for new users",
+    ],
+  },
+];
+
 // ── Duplicate detection ───────────────────────────────────────────────────────
 
 function normalizeItem(i) {
@@ -2102,6 +2162,7 @@ function BuildTab({ session, profiles, setProfiles, activeProfile, onProfileSwit
 
 function SettingsPanel({onClose, itemCount, debugEnabled, setDebugEnabled, user, session, onSignOut, onSignIn,
   keyStatus, keyInput, setKeyInput, keySaving, keySaved, saveApiKey, setScanProvider}) {
+  const [changelogOpen, setChangelogOpen] = useState(false);
   return (
     <div style={{position:"fixed",inset:0,zIndex:100,display:"flex",flexDirection:"column"}}>
       <div onClick={onClose} style={{flex:1,background:"rgba(0,0,0,0.6)"}}/>
@@ -2205,6 +2266,42 @@ function SettingsPanel({onClose, itemCount, debugEnabled, setDebugEnabled, user,
                 {debugEnabled?"ON":"OFF"}
               </button>
             </div>
+          </div>
+
+          {/* Changelog */}
+          <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:"hidden"}}>
+            <button
+              onClick={() => setChangelogOpen(s => !s)}
+              style={{width:"100%", padding:"14px 18px", background:"transparent", border:"none",
+                display:"flex", justifyContent:"space-between", alignItems:"center", cursor:"pointer"}}>
+              <span style={{color:C.gold, fontSize:13, fontWeight:700, letterSpacing:1.5,
+                fontFamily:"'Courier New',monospace"}}>CHANGELOG</span>
+              <span style={{color:C.textDim, fontSize:12}}>{changelogOpen ? "▲" : "▼"}</span>
+            </button>
+            {changelogOpen && (
+              <div style={{borderTop:`1px solid ${C.border}`, padding:"4px 0 12px",
+                maxHeight:380, overflowY:"auto"}}>
+                {CHANGELOG.map((entry, i) => (
+                  <div key={entry.version} style={{padding:"12px 18px",
+                    borderBottom: i < CHANGELOG.length - 1 ? `1px solid ${C.border}` : "none"}}>
+                    <div style={{display:"flex", justifyContent:"space-between",
+                      alignItems:"baseline", marginBottom:8}}>
+                      <span style={{color:C.gold, fontSize:13, fontWeight:700,
+                        fontFamily:"'Courier New',monospace"}}>v{entry.version}</span>
+                      <span style={{color:C.textDim, fontSize:11}}>{entry.date}</span>
+                    </div>
+                    <div style={{display:"flex", flexDirection:"column", gap:5}}>
+                      {entry.changes.map((change, j) => (
+                        <div key={j} style={{display:"flex", gap:8, alignItems:"flex-start"}}>
+                          <span style={{color:C.textDim, fontSize:12, flexShrink:0, marginTop:1}}>·</span>
+                          <span style={{color:C.text, fontSize:12, lineHeight:1.5}}>{change}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
